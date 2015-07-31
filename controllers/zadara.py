@@ -1,12 +1,9 @@
-#! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-reload(sys)
-# Set default encoding to UTF-8
-sys.setdefaultencoding('utf8')
 import json
-from utils import *
+import logging
+
+import utils
 
 CHANGE_STATES = ['hibernate_offlining', 'hibernating', 'launching', 'booting']
 
@@ -21,9 +18,10 @@ class ZadaraController():
     def __zadara_request__(self, endpoint, isPost=False):
         if isPost:
             #Don't return anything, because this just hangs if you do...
-            http_request("https://manage.zadarastorage.com", endpoint, special_request="ZADARA_POST", content_type="application/json")
+            utils.http_request("https://manage.zadarastorage.com", endpoint, special_request="ZADARA_POST", content_type="application/json")
         else:
-            return json.loads(http_request("https://manage.zadarastorage.com", endpoint, content_type="application/json"))
+            return json.loads(
+                utils.http_request("https://manage.zadarastorage.com", endpoint, content_type="application/json"))
 
     def get_vpsas(self):
         self.logger.debug("Getting VPSAs for {0}".format(self.security_token))

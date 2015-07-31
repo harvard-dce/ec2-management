@@ -1,12 +1,13 @@
-import boto.ec2
-import boto.ec2.networkinterface
-from boto.exception import *
+
+
 import time
+import logging
 import traceback
-from matterhorn import *
-from zadara import *
-from utils import *
+import boto.ec2.networkinterface
+from boto.exception import EC2ResponseError
+
 import settings
+from exceptions import MatterhornCommunicationException
 
 """
 class Instance(boto.ec2.ec2object.TaggedEC2Object)

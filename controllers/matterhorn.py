@@ -1,32 +1,13 @@
-#! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-reload(sys)
-# Set default encoding to UTF-8
-sys.setdefaultencoding('utf8')
-
-import os
-import errno
-import pwd
 import json
-import re
-from datetime import datetime, timedelta
-import os.path
 import logging
-import settings
 import socket
-from utils import *
 from urllib2 import URLError, HTTPError
 
-class MatterhornCommunicationException(Exception):
-    def __init__(self, code, value):
-        self.code = int(code)
-        self.value = value
-    def __str__(self):
-        return repr(self.value)
-    def code(self):
-        return self.code
+import utils
+from exceptions import MatterhornCommunicationException
+
 
 class MatterhornController():
 
@@ -58,7 +39,7 @@ class MatterhornController():
 
         if 'service' not in result['services']:
             return False
-        services = ensureList(result['services']['service'])
+        services = utils.ensureList(result['services']['service'])
         online = True
         for service in services:
             if service['online'] != True:
@@ -125,9 +106,9 @@ class MatterhornController():
 
     def __get_from_endpoint__(self, host, endpoint, data=None):
         if data != None:
-          return http_request(host, endpoint, data, special_request="MATTERHORN")
+          return utils.http_request(host, endpoint, data, special_request="MATTERHORN")
         else:
-          return http_request(host, endpoint, special_request="MATTERHORN")
+          return utils.http_request(host, endpoint, special_request="MATTERHORN")
 
     def get_json_from_endpoint(self, awsInstance, endpoint, data=None):
         return json.loads(self.get_from_endpoint(awsInstance, endpoint, data))
@@ -155,7 +136,7 @@ class MatterhornController():
         results = self.get_json_from_endpoint(awsInstance, endpoint)
         hosts = {}
 
-        results['hosts']['host'] = ensureList(results['hosts']['host'])
+        results['hosts']['host'] = utils.ensureList(results['hosts']['host'])
 
         for host in results['hosts']['host']:
             hosts[host["base_url"]] = host
@@ -195,7 +176,7 @@ class MatterhornController():
         endpoint = "/services/statistics.json"
         results = self.get_json_from_endpoint(awsInstance, endpoint)
         loadsByHost = {}
-        for service in ensureList(results['statistics']['service']):
+        for service in utils.ensureList(results['statistics']['service']):
             registration = service["serviceRegistration"]
             hostDict = {}
             if registration["host"] in loadsByHost:
@@ -208,3 +189,4 @@ class MatterhornController():
                 "maintenance"], 'online': registration["online"], 'running': service["running"]}
             loadsByHost[registration["host"]] = hostDict
         return loadsByHost
+

@@ -1,9 +1,9 @@
 import argparse
-from aws import *
-from matterhorn import *
-from zadara import *
-from utils import *
+
+import utils
 import settings
+from controllers import AWSController, MatterhornController, ZadaraController
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -35,11 +35,11 @@ def main():
 
     if cluster == None:
         logPrefix = "ec2_manager-NOCLUSTER"
-        logger = setupLogger(logPrefix)
+        logger = utils.setupLogger(logPrefix)
         logger.error("No cluster specified!")
 
     logPrefix = "ec2_manager-" + cluster
-    logger = setupLogger(logPrefix)
+    logger = utils.setupLogger(logPrefix)
 
     if dryrun:
         logger.info("Dryrun mode enabled")
