@@ -1,13 +1,11 @@
-import settings
-import pprint
-import logging
-import logging.handlers
-import os
 import sys
-import urllib2
+import pprint
 import urllib
+import urllib2
+import logging
+from unipath import Path
 
-logger = logging.getLogger("ec2_manager.utils")
+import settings
 
 def http_request(server, endpoint, post_data=None, special_request=None, content_type=None):
 
@@ -55,24 +53,37 @@ def http_request(server, endpoint, post_data=None, special_request=None, content
                         (endpoint, status))
     return response.read()
 
-def setupLogger(forName, consoleLevel=logging.DEBUG):
-    logFormatter = logging.Formatter(
+def init_logging(cluster, verbose, level=logging.INFO):
+
+    log_dir = Path(__file__).parent.child('logs')
+    if not log_dir.exists():
+        raise RuntimeError("Missing log path: {}".format(log_dir))
+
+    log_file = "ec2-manager_{}.log".format(cluster)
+    log_path = log_dir.child(log_file)
+
+    log = logging.getLogger()
+    log.setLevel(level)
+
+    format=logging.Formatter(
         '%(asctime)-15s - %(name)s:%(lineno)s - %(levelname)s - %(message)s')
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(logFormatter)
-    logger = logging.getLogger(forName)
-    logger.addHandler(consoleHandler)
-    logger.setLevel(consoleLevel)
 
-    logfileName = os.path.abspath(forName + ".log")
+    fh = logging.handlers.TimedRotatingFileHandler(log_path, when='D', interval=1)
+    fh.setLevel(level)
+    fh.setFormatter(format)
+    log.addHandler(fh)
 
-    logger.info("Logging to %s" % logfileName)
-    fileHandler = logging.handlers.TimedRotatingFileHandler(
-        logfileName, when='D', interval=1)
-    fileHandler.setFormatter(logFormatter)
-    logger.addHandler(fileHandler)
+    if verbose:
+        sh = logging.StreamHandler(sys.stdout)
+        sh.setFormatter(format)
+        sh.setLevel(level)
+        log.addHandler(sh)
+        log.debug("logging to stdout")
 
-    return logger
+    log.debug("logging to %s", log_path)
+    return log
+
+
 
 def ensureList(thing):
     if not isinstance(thing, list):

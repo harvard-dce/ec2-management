@@ -8,11 +8,12 @@ from urllib2 import URLError, HTTPError
 import utils
 from exceptions import MatterhornCommunicationException
 
+log = logging.getLogger()
 
 class MatterhornController():
 
-    def __init__(self, loggingPrefix, dry_run=False):
-        self.logger = logging.getLogger(loggingPrefix + ".MatterhornController")
+    def __init__(self, cluster_prefix, dry_run=False):
+        self.cluster_prefix = cluster_prefix
         self.dry_run = dry_run
 
     def __generate_matterhorn_node_names__(self, awsInstance):
@@ -29,10 +30,10 @@ class MatterhornController():
         result = None
         for node in self.__generate_matterhorn_node_names__(awsInstance):
             endpoint = "/services/services.json?host=" + node
-            self.logger.debug("Asking {0} @ {1} if {2} is alive".format(adminAwsInstance.id, node, node))
+            log.debug("Asking {0} @ {1} if {2} is alive".format(adminAwsInstance.id, node, node))
             result = self.get_json_from_endpoint(adminAwsInstance, endpoint)
             if 'services' not in result or 'service' not in result['services']:
-                self.logger.debug("{0} has never heard of {1}".format(adminAwsInstance.id, node))
+                log.debug("{0} has never heard of {1}".format(adminAwsInstance.id, node))
                 continue
             else:
                 break
@@ -45,10 +46,10 @@ class MatterhornController():
             if service['online'] != True:
                 online = False
         if online:
-          self.logger.debug("{0} says {1} is alive".format(adminAwsInstance.id, node))
+          log.debug("{0} says {1} is alive".format(adminAwsInstance.id, node))
           return True
         else:
-          self.logger.debug("{0} says {1} is down, or is not up by that name".format(adminAwsInstance.id, node))
+          log.debug("{0} says {1} is down, or is not up by that name".format(adminAwsInstance.id, node))
           return False
 
     def place_matterhorn_in_maintenance(self, admin_aws_instance, aws_instance, maintenance_mode):
@@ -57,16 +58,16 @@ class MatterhornController():
         for host in self.__generate_matterhorn_node_names__(aws_instance):
             pData = {"host": str(host), "maintenance": str(maintenance_mode)}
             if self.dry_run:
-                self.logger.info(
+                log.info(
                     "Dry run prevented telling {0} to set {1} to maintenance state {2}".format(admin_aws_instance.id, host, maintenance_mode))
             else:
-                self.logger.debug(
+                log.debug(
                     "Telling {0} to set the maintenance value for {1} to {2}".format(admin_aws_instance.id, host, maintenance_mode))
                 try:
                   self.get_from_endpoint(admin_aws_instance, endpoint, pData)
                   return
                 except MatterhornCommunicationException as e:
-                    self.logger.info("{0} does not know about {1}, or {2} is down".format(admin_aws_instance.id, host, host))
+                    log.info("{0} does not know about {1}, or {2} is down".format(admin_aws_instance.id, host, host))
 
     def get_matterhorn_external_dns_name(self, awsInstance):
         return "http://" + awsInstance.public_dns_name
@@ -88,7 +89,7 @@ class MatterhornController():
 
     def get_from_endpoint(self, awsInstance, endpoint, data=None):
         for host in self.__generate_matterhorn_node_names__(awsInstance):
-            self.logger.debug("Attempting communication with {0} at {1}".format(awsInstance.id, host))
+            log.debug("Attempting communication with {0} at {1}".format(awsInstance.id, host))
             try:
                 return self.__get_from_endpoint__(host, endpoint, data)
             except HTTPError as e:
@@ -121,11 +122,11 @@ class MatterhornController():
             nodeLoad = nodeLoads[node]
             for service in nodeLoad['services']:
                 if nodeLoad['services'][service]['maintenance'] == False:
-                    self.logger.debug("{0} @ {1} is not in maintenance".format(awsInstance.id, node))
+                    log.debug("{0} @ {1} is not in maintenance".format(awsInstance.id, node))
                     return False
-            self.logger.debug("{0} @ {1} is in maintenance".format(awsInstance.id, node))
+            log.debug("{0} @ {1} is in maintenance".format(awsInstance.id, node))
             return True
-        self.logger.debug("{0} is not listed in the service registry".format(awsInstance.id))
+        log.debug("{0} is not listed in the service registry".format(awsInstance.id))
         error = MatterhornCommunicationException('-3', "Node is not present")
         raise error
 
@@ -147,7 +148,7 @@ class MatterhornController():
         return self.__is_node_idle__(awsInstance, loadData)
 
     def __is_node_idle__(self, awsInstance, loadData):
-        self.logger.debug("Searching load data for {0} for the node load".format(awsInstance.id))
+        log.debug("Searching load data for {0} for the node load".format(awsInstance.id))
         for internalName in self.__generate_matterhorn_node_names__(awsInstance):
             if internalName not in loadData:
                 continue
@@ -156,11 +157,11 @@ class MatterhornController():
                 WORKFLOW_KEY = 'org.opencastproject.workflow'
                 #If there are workflow jobs running, and they are *not* equal to the total number of jobs running on this node, then the node is not idle.
                 if WORKFLOW_KEY in loadData[internalName]['services'] and int(loadData[internalName]['services'][WORKFLOW_KEY]['running']) != int(loadData[internalName]['running']):
-                    self.logger.debug("{0} @ {1} is NOT idle".format(awsInstance.id, internalName))
+                    log.debug("{0} @ {1} is NOT idle".format(awsInstance.id, internalName))
                     return False
-            self.logger.debug("{0} @ {1} is idle".format(awsInstance.id, internalName))
+            log.debug("{0} @ {1} is idle".format(awsInstance.id, internalName))
             return True
-        self.logger.debug("{0} is not present in the load data".format(awsInstance.id))
+        log.debug("{0} is not present in the load data".format(awsInstance.id))
         error = MatterhornCommunicationException('-3', "Node is not present")
         raise error
 
@@ -172,7 +173,7 @@ class MatterhornController():
         return True
 
     def get_all_node_loads(self, awsInstance):
-        self.logger.debug("Asking {0} for the node loads".format(awsInstance.id))
+        log.debug("Asking {0} for the node loads".format(awsInstance.id))
         endpoint = "/services/statistics.json"
         results = self.get_json_from_endpoint(awsInstance, endpoint)
         loadsByHost = {}

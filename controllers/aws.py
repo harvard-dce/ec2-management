@@ -72,6 +72,7 @@ class Instance(boto.ec2.ec2object.TaggedEC2Object)
  |  
 """
 
+log = logging.getLogger()
 
 class AWSController():
 
@@ -83,7 +84,6 @@ class AWSController():
         self.dry_run = test
         self.forced = force
         self.retries = retries
-        self.logger = logging.getLogger(logPrefix + ".AWSController")
 
     # tag = "stgAWS-" or "devAWS-* or "devAWS-worker"
     # see
@@ -96,18 +96,18 @@ class AWSController():
 
         # Set up the state filters, if any
         if state:
-            self.logger.debug("State set to " + str(state))
+            log.debug("State set to " + str(state))
             filters = {"instance-state-name": state}
 
         # Set up the tag filters, if any
         if tag:
-            self.logger.debug("Tag set to " + str(tag))
+            log.debug("Tag set to " + str(tag))
             filters["tag:Name"] = tag
 
         # Set up the id filters, if any
         if ids:
             for id in ids:
-                self.logger.debug("Searching for ID {0}".format(id))
+                log.debug("Searching for ID {0}".format(id))
                 filters["instance-id"] = id
                 instances += self.conn.get_only_instances(filters=filters)
         else:
@@ -115,9 +115,9 @@ class AWSController():
             instances = self.conn.get_only_instances(filters=filters)
 
         if len(instances) < 1:
-            self.logger.debug("No matching instances found")
+            log.debug("No matching instances found")
         for i in instances:
-            self.logger.debug("Found: {0}, {1}, {2}, {3}, {4}, monitor {5}".format(i.tags[
+            log.debug("Found: {0}, {1}, {2}, {3}, {4}, monitor {5}".format(i.tags[
                          'Name'], i.id,  i.state, i.ip_address, i.private_ip_address, i.monitoring_state))
         return self.createInstanceListDict(instances)
 
@@ -156,7 +156,7 @@ class AWSController():
             if self.isMatterhornAdminNode(instance):
                 adminNodes.append(instance)
         if len(adminNodes) < 1:
-            self.logger.error("Unable to determine admin node for cluster")
+            log.error("Unable to determine admin node for cluster")
             raise Exception("Unable to determine admin node for cluster")
         return adminNodes
 
@@ -186,7 +186,7 @@ class AWSController():
         # Sort the instances
         for instance in instances.values():
             if self.isMatterhornNode(instance):
-                self.logger.debug("Instance {0} with name {1} detected as a Matterhorn instance".format(
+                log.debug("Instance {0} with name {1} detected as a Matterhorn instance".format(
                     instance.id, instance.tags['Name']))
                 mhInstances[instance.id] = instance
         # Get the admin instances
@@ -200,7 +200,7 @@ class AWSController():
         for i in instances.values():
             if self.isMatterhornNode(i):
                 if i.state != "running":
-                    self.logger.info("Skipping setting maintenance to {0} for node {1}, internally {2}, because the node is not running".format(
+                    log.info("Skipping setting maintenance to {0} for node {1}, internally {2}, because the node is not running".format(
                         targetMaintenanceState, i.tags['Name'], i.private_ip_address))
                     continue
                 matterhornNodes.append(i)
@@ -210,7 +210,7 @@ class AWSController():
         while done != len(matterhornNodes):
             #Note: we're using done as an index into the list
             i = matterhornNodes[done]
-            self.logger.info("Setting maintenance to {0} for node {1}, internally {2}".format(
+            log.info("Setting maintenance to {0} for node {1}, internally {2}".format(
                 targetMaintenanceState, i.tags['Name'], i.private_ip_address))
             # Ugh, this is ugly but functional.  Basically, the public node is an all-in-one but still shows up as having an admin instance since it matches the prefix
             # This just looks for the public suffix (which, currently, is
@@ -230,7 +230,7 @@ class AWSController():
                         adminInstance, i, targetMaintenanceState)
                 done = done + 1
             except MatterhornCommunicationException as e:
-                self.logger.warning("Unable to communicate with Matterhorn, error code is {0}".format(e.code))
+                log.warning("Unable to communicate with Matterhorn, error code is {0}".format(e.code))
                 if i.id not in attempts:
                     attempts[i.id] = 1
                 else:
@@ -238,18 +238,18 @@ class AWSController():
 
                 if attempts[i.id] >= self.retries:
                     if settings.AWS_PROD_PREFIX in adminInstance.tags['Name'] and not self.forced:
-                        self.logger.error("This is a prod worker, so we are being very paranoid here")
-                        self.logger.error("Raising the same exception to break things, rather than allowing things to continue")
+                        log.error("This is a prod worker, so we are being very paranoid here")
+                        log.error("Raising the same exception to break things, rather than allowing things to continue")
                         raise e
                     elif settings.AWS_PROD_PREFIX in adminInstance.tags['Name'] and self.forced:
-                        self.logger.warning("This is a prod worker, so normally we would be very paranoid here")
-                        self.logger.warning("The --force flag has been activated however, so we are continuing")
+                        log.warning("This is a prod worker, so normally we would be very paranoid here")
+                        log.warning("The --force flag has been activated however, so we are continuing")
                         done = done + 1
                     else:
-                        self.logger.warn("Ignoring the issue since this is not a prod node")
+                        log.warn("Ignoring the issue since this is not a prod node")
                         done = done + 1
                 else:
-                    self.logger.info("Retrying maintenance call to {0}".format(i.private_ip_address))
+                    log.info("Retrying maintenance call to {0}".format(i.private_ip_address))
 
     def sort_node_loads(self, prefix, adminNode, runningNodes, neededNodes):
         maintenancedNodes = {}
@@ -265,7 +265,7 @@ class AWSController():
                 adminNode).values() if x['host'] in nodesByMatterhornName]
             currentLoads.sort(key=lambda node: node['running'])
         except MatterhornCommunicationException as e:
-            self.logger.warning("Unable to communicate with Matterhorn, error code is {0}".format(e.code))
+            log.warning("Unable to communicate with Matterhorn, error code is {0}".format(e.code))
             raise e
 
         # Go through the sorted list of loads and shut down the least busy
@@ -273,7 +273,7 @@ class AWSController():
         for i in range(0, neededNodes):
             internalNodeName = currentLoads[i]['host']
             instance = nodesByMatterhornName[internalNodeName]
-            self.logger.debug("Sorted instance {0} into maintenance for cluster {1}".format(
+            log.debug("Sorted instance {0} into maintenance for cluster {1}".format(
                 instance.id, prefix))
             maintenancedNodes[instance.id] = instance
 
@@ -319,27 +319,27 @@ class AWSController():
 
     def start_instance(self, instance):
         try:
-            self.logger.debug("Starting: {0}, {1}, {2}, {3}, {4}".format(
+            log.debug("Starting: {0}, {1}, {2}, {3}, {4}".format(
                 instance.tags['Name'], instance.id,  instance.state, instance.ip_address, instance.private_ip_address))
             instance.start(dry_run=self.dry_run)
         except EC2ResponseError as e:
-            self.logger.error("Error starting instance: {}".format(
+            log.error("Error starting instance: {}".format(
                 traceback.format_exc().splitlines()[-1]))
 
     def stop_instance(self, instance):
         try:
-            self.logger.debug("Stopping: {0}, {1}, {2}, {3}, {4}".format(
+            log.debug("Stopping: {0}, {1}, {2}, {3}, {4}".format(
                 instance.tags['Name'], instance.id,  instance.state, instance.ip_address, instance.private_ip_address))
             instance.stop(dry_run=self.dry_run)
         except EC2ResponseError as e:
-            self.logger.error("Error stopping instance: {}".format(
+            log.error("Error stopping instance: {}".format(
                 traceback.format_exc().splitlines()[-1]))
 
     def ensureClusterHasWorkers(self, prefix, numberOfWorkers):
         adminNodes = self.get_tagged_instances(
             tag=prefix + settings.AWS_MH_SUFFIXES[0], state="running")
         if len(adminNodes) < 1:
-            self.logger.error(
+            log.error(
                 "Unable to find running admins for cluster {0}, is the cluster online?".format(prefix))
             return
         runningWorkers = self.get_tagged_instances(
@@ -354,30 +354,30 @@ class AWSController():
               alreadyInMaintenance[worker.id] = worker
 
         if len(runningWorkers) + len(stoppedWorkers) < 1:
-            self.logger.error(
+            log.error(
                 "Unable to find workers for cluster {0}".format(prefix))
         elif len(runningWorkers) == numberOfWorkers:
-            self.logger.info(
+            log.info(
                 "Cluster {0} already has {1} workers running".format(prefix, numberOfWorkers))
         else:
             # Determine the number of workers affected (this could be
             # negative!)
             neededWorkers = len(runningWorkers) - numberOfWorkers
-            self.logger.info("We currently have {0} workers running with {1} in maintenance, we want {2} running".format(len(runningWorkers), len(alreadyInMaintenance), numberOfWorkers))
+            log.info("We currently have {0} workers running with {1} in maintenance, we want {2} running".format(len(runningWorkers), len(alreadyInMaintenance), numberOfWorkers))
             # If we need more workers
             if neededWorkers < 0:
                 neededWorkers = abs(neededWorkers)
-                self.logger.info(
+                log.info(
                     "We need {0} more workers, starting them up".format(neededWorkers))
                 if neededWorkers > len(stoppedWorkers):
-                    self.logger.warning(
+                    log.warning(
                         "Desired number of workers exceeds the total number of workers in the cluster.  Starting all workers!")
                     # TODO: Spin up new workers!
                 neededWorkers = min(neededWorkers, len(stoppedWorkers))
                 startedInstances = {}
                 for i in range(0, neededWorkers):
                     startedInstance = stoppedWorkers.values()[i]
-                    self.logger.info(
+                    log.info(
                         "Starting instance {0} for cluster {1}".format(startedInstance.id, prefix))
                     startedInstances[startedInstance.id] = startedInstance
                 self.start_instances(startedInstances)
@@ -387,7 +387,7 @@ class AWSController():
                     adminNodes.values()[0], startedInstances)
             # If we need fewer workers
             else:
-                self.logger.info(
+                log.info(
                     "We need {0} fewer workers, shutting some down".format(neededWorkers))
 
                 # Figure out which workers to put into maintenance
@@ -411,25 +411,25 @@ class AWSController():
                     try:
                         isIdle = self.matterhorn.is_node_idle(adminNodes.values()[0], instance)
                     except MatterhornCommunicationException as e:
-                        self.logger.warning("Unable to communicate with admin node for cluster {0}, error code is {1}".format(prefix, e.code))
+                        log.warning("Unable to communicate with admin node for cluster {0}, error code is {1}".format(prefix, e.code))
                         if e.code == -1:
                             if settings.AWS_PROD_PREFIX in prefix and not self.forced:
-                                self.logger.error("This is operating on prod, so we are being very paranoid")
-                                self.logger.error("Raising the same exception to break things, rather than attempting to recover")
+                                log.error("This is operating on prod, so we are being very paranoid")
+                                log.error("Raising the same exception to break things, rather than attempting to recover")
                                 raise e
                             elif settings.AWS_PROD_PREFIX in prefix and self.forced:
-                                self.logger.warning("This is operating on prod, so normally we would be being very paranoid")
-                                self.logger.warning("The --force flag has been activated however, so we are continuing")
+                                log.warning("This is operating on prod, so normally we would be being very paranoid")
+                                log.warning("The --force flag has been activated however, so we are continuing")
                                 isIdle = True
                             else:
-                                self.logger.warning("Since this is a dev system, we are going to assume that it is either broken or somehow offline")
+                                log.warning("Since this is a dev system, we are going to assume that it is either broken or somehow offline")
                                 isIdle = True
                     if isIdle:
-                        self.logger.info("Node {0} is in maintenance".format(instance.id))
+                        log.info("Node {0} is in maintenance".format(instance.id))
                         # Shut the node(s) down
                         self.stop_instance(instance)
                     else:
-                        self.logger.warn("Node {0} is either offline, or not yet in maintenance".format(instance.id))
+                        log.warn("Node {0} is either offline, or not yet in maintenance".format(instance.id))
 
     def startupAwsInstancesBySuffixList(self, awsInstances, suffixList, nodeLimits={}):
         changedInstances = {}
@@ -458,7 +458,7 @@ class AWSController():
             for candidate in candidateNodes[suffix]:
                 # If we are at or above the limit for this suffix
                 if suffix in activeNodeTypes and suffix in nodeLimits and len(activeNodeTypes[suffix]) >= nodeLimits[suffix]:
-                    self.logger.debug("Skipping candidate node {0} at ip {1}, internally {2}, because we are already at or above the limit of {3} for {4} nodes".format(
+                    log.debug("Skipping candidate node {0} at ip {1}, internally {2}, because we are already at or above the limit of {3} for {4} nodes".format(
                         candidate.tags['Name'], candidate.ip_address, candidate.private_ip_address, nodeLimits[suffix], suffix))
                     continue
 
@@ -466,7 +466,7 @@ class AWSController():
                 activeNodeTypes[suffix].append(candidate)
 
                 # Start the candidate
-                self.logger.info("Starting node {0} at ip {1}, internally {2}".format(
+                log.info("Starting node {0} at ip {1}, internally {2}".format(
                     candidate.tags['Name'], candidate.ip_address, candidate.private_ip_address))
                 changedInstances[candidate.id] = candidate
         self.start_instances(changedInstances)
@@ -498,7 +498,7 @@ class AWSController():
             # This is so that when you're starting N Matterhorn nodes with M support nodes already running you see N+M/N+M at
             # the end, rather than N/N, otherwise it looks weird.  Functionally, you can remove the addition clause without
             # hurting anything, as long as you remove *both*
-            self.logger.info(
+            log.info(
                 "{0} / {1} instances started...".format(done + len(running), changes + len(running)))
         return changedInstances
 
@@ -508,7 +508,7 @@ class AWSController():
         # Take the nodes out of maintenance
         attempts  = {}
         while done != len(changedInstances):
-            self.logger.info("Waiting for Matterhorn to be alive...")
+            log.info("Waiting for Matterhorn to be alive...")
             #time.sleep(10)
             done = 0
             for instance in changedInstances.values():
@@ -523,24 +523,24 @@ class AWSController():
                         # nodes things don't break
                         done = done + 1
                     elif self.isMatterhornAlive(adminNode, instance):
-                        self.logger.debug("Node {0} with ip {1} is alive".format(
+                        log.debug("Node {0} with ip {1} is alive".format(
                             instance.id, instance.private_ip_address))
                         done = done + 1
                     else:
-                        self.logger.debug("Node {0} with ip {1} is not alive yet".format(
+                        log.debug("Node {0} with ip {1} is not alive yet".format(
                             instance.id, instance.private_ip_address))
                 except MatterhornCommunicationException as e:
-                    self.logger.warning("Unable to communicate with Matterhorn, error code is {0}".format(e.code))
+                    log.warning("Unable to communicate with Matterhorn, error code is {0}".format(e.code))
                     if instance.id in attempts:
                         if attempts[instance.id] > self.retries:
                             instance.update()
                             if instance.state not in ["pending", "running"]:
-                              self.logger.info("Resending start for instance {0}".format(instance.id))
+                              log.info("Resending start for instance {0}".format(instance.id))
                               self.start_instance(instance)
                               attempts[instance.id] = 0
                             elif instance.state == "running":
-                              self.logger.warning("AWS instance {0} appears to be running, but is not responding to attempts to take it out of maintenance".format(instance.id))
-                              self.logger.warning("We are ignoring this, and assuming that it will be handled manually")
+                              log.warning("AWS instance {0} appears to be running, but is not responding to attempts to take it out of maintenance".format(instance.id))
+                              log.warning("We are ignoring this, and assuming that it will be handled manually")
                               done = done + 1
                         else:
                             attempts[instance.id] = attempts[instance.id] + 1
@@ -555,32 +555,32 @@ class AWSController():
         vpsaId = None
         if settings.AWS_PROD_PREFIX in prefix:
             vpsaId = settings.ZADARA_VPSA_PROD_ID
-            self.logger.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
+            log.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
         elif settings.AWS_STG_PREFIX in prefix:
             vpsaId = settings.ZADARA_VPSA_STG_ID
-            self.logger.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
+            log.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
         elif settings.AWS_DEV_PREFIX in prefix:
             vpsaId = settings.ZADARA_VPSA_DEV_ID
-            self.logger.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
+            log.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
 
         if vpsaId != None:
             while not self.zadara.is_vpsa_stable_state(vpsaId):
-                self.logger.info(
+                log.info(
                     "Waiting for VPSA {0} to be in a stable state".format(vpsaId))
                 time.sleep(30)
             if self.zadara.is_vpsa_up(vpsaId):
-                self.logger.info(
+                log.info(
                     "VPSA with ID {0} is already up".format(str(vpsaId)))
             else:
-                self.logger.info(
+                log.info(
                     "Prefix is {0}, starting Zadara array {1}".format(prefix, str(vpsaId)))
                 self.zadara.resume(vpsaId)
                 while not self.zadara.is_vpsa_up(vpsaId):
-                    self.logger.info("Waiting for VPSA {0} to be up".format(vpsaId))
+                    log.info("Waiting for VPSA {0} to be up".format(vpsaId))
                     time.sleep(30)
 
     def bringupCluster(self, prefix, numWorkers=None):
-        self.logger.info("Bringing up cluster %s " % prefix)
+        log.info("Bringing up cluster %s " % prefix)
 
         self.bringUpZadara(prefix)
 
@@ -609,7 +609,7 @@ class AWSController():
         # Bring Matterhorn out of maintenance
         self.takeClusterOutOfMaintenance(adminNodes[0], instances)
 
-        self.logger.info("Cluster %s online" % prefix)
+        log.info("Cluster %s online" % prefix)
 
     def shutdownAwsInstancesBySuffixList(self, awsInstances, suffixList):
         changedInstances = {}
@@ -620,7 +620,7 @@ class AWSController():
                 # If the instance is named correctly and running, stop it and
                 # add it to the changed list
                 if awsInstance.state == "running" and suffix in awsInstance.tags["Name"]:
-                    self.logger.info("Stopping node {0} at ip {1}, internally {2}".format(
+                    log.info("Stopping node {0} at ip {1}, internally {2}".format(
                         awsInstance.tags['Name'], awsInstance.ip_address, awsInstance.private_ip_address))
                     changedInstances[awsInstance.id] = awsInstance
         self.stop_instances(changedInstances)
@@ -653,7 +653,7 @@ class AWSController():
             # This is so that when you're stopping N support nodes with M Mastterhorn nodes already running you see N+M/N+M at
             # the end, rather than N/N, otherwise it looks weird.  Functionally, you can remove the addition clause without
             # hurting anything, as long as you remove *both*
-            self.logger.info("{0} / {1} instances stopped...".format(done +
+            log.info("{0} / {1} instances stopped...".format(done +
                                                                 len(alreadyStopped), changes + len(alreadyStopped)))
         return changedInstances
 
@@ -664,7 +664,7 @@ class AWSController():
         done = 0
         # Wait until they are all in maintenance
         while done != len(changedInstances):
-            self.logger.debug("Waiting for Matterhorn to be in maintenance...")
+            log.debug("Waiting for Matterhorn to be in maintenance...")
             if len(changedInstances) > 0:
                 time.sleep(10)
             done = 0
@@ -680,48 +680,48 @@ class AWSController():
                 try:
                     if self.isMatterhornNode(instance) and instance.state == "running" and self.isMatterhornAlive(actualAdminNode, instance):
                         if self.matterhorn.is_node_in_maintenance(actualAdminNode, instance) and self.matterhorn.is_node_idle(actualAdminNode, instance):
-                            self.logger.debug("Node {0} with ip {1} is alive, in maintenance, and idle".format(
+                            log.debug("Node {0} with ip {1} is alive, in maintenance, and idle".format(
                                 instance.id, instance.private_ip_address))
                             done = done + 1
                         else:
-                            self.logger.debug("Node {0} with ip {1} is alive and still active".format(
+                            log.debug("Node {0} with ip {1} is alive and still active".format(
                                 instance.id, instance.private_ip_address))
                             if instance.id in attempts:
                                 if attempts[instance.id] > self.retries:
                                     if settings.AWS_PROD_PREFIX in actualAdminNode.tags['Name']:
-                                      self.logger.info("We are bored of waiting for {0} to be done".format(instance.id))
-                                      self.logger.info("But since this is prod we're being extra paranoid, so we're just going to keep waiting")
+                                      log.info("We are bored of waiting for {0} to be done".format(instance.id))
+                                      log.info("But since this is prod we're being extra paranoid, so we're just going to keep waiting")
                                     else:
-                                      self.logger.warning("We are bored of waiting for {0} to be done".format(instance.id))
-                                      self.logger.warning("Since this is a dev or stage instance, we're going to assume it's safe to just shut it down")
+                                      log.warning("We are bored of waiting for {0} to be done".format(instance.id))
+                                      log.warning("Since this is a dev or stage instance, we're going to assume it's safe to just shut it down")
                                       done = done + 1
                                 else:
                                     attempts[instance.id] = attempts[instance.id] + 1
                             else:
                                 attempts[instance.id] = 1
                     else:
-                        self.logger.debug("Node {0} with ip {1} is already down or not responding".format(
+                        log.debug("Node {0} with ip {1} is already down or not responding".format(
                             instance.id, instance.private_ip_address))
                         # This is right because we're assuming that some of these
                         # nodes are *not* matterhorn nodes and thus do not go into
                         # maintenance!
                         done = done + 1
                 except MatterhornCommunicationException as e:
-                    self.logger.warning("Unable to communicate with Matterhorn, error code is {0}".format(e.code))
+                    log.warning("Unable to communicate with Matterhorn, error code is {0}".format(e.code))
                     if attempts[instance.id] > self.retries:
                         if settings.AWS_PROD_PREFIX in adminNode.tags['Name'] and not self.forced:
-                          self.logger.error("Unable to put node {0} into maintenance, unable to communicate with {1}".format(instance.id, self.matterhorn.get_matterhorn_internal_name(adminNode)))
-                          self.logger.error("Since this is prod we're being extra paranoid, so this kills the maintenance attempt")
-                          self.logger.error("Raising the same error to break things rather than attempt to continue")
+                          log.error("Unable to put node {0} into maintenance, unable to communicate with {1}".format(instance.id, self.matterhorn.get_matterhorn_internal_name(adminNode)))
+                          log.error("Since this is prod we're being extra paranoid, so this kills the maintenance attempt")
+                          log.error("Raising the same error to break things rather than attempt to continue")
                           raise e
                         elif settings.AWS_PROD_PREFIX in adminNode.tags['Name'] and self.forced:
-                          self.logger.warning("Unable to put node {0} into maintenance, unable to communicate with {1}".format(instance.id, self.matterhorn.get_matterhorn_internal_name(adminNode)))
-                          self.logger.warning("Since this is prod we would normally be extra paranoid and kill the maintenance attempt")
-                          self.logger.warning("The --force flag has been activated however, so we are continuing")
+                          log.warning("Unable to put node {0} into maintenance, unable to communicate with {1}".format(instance.id, self.matterhorn.get_matterhorn_internal_name(adminNode)))
+                          log.warning("Since this is prod we would normally be extra paranoid and kill the maintenance attempt")
+                          log.warning("The --force flag has been activated however, so we are continuing")
                           done = done + 1
                         else:
-                          self.logger.warning("Unable to put node {0} into maintenance, unable to communicate with {1}".format(instance.id, self.matterhorn.get_matterhorn_internal_name(adminNode)))
-                          self.logger.warning("Since this is a dev or stage instance, we're going to assume it's safe to ignore this")
+                          log.warning("Unable to put node {0} into maintenance, unable to communicate with {1}".format(instance.id, self.matterhorn.get_matterhorn_internal_name(adminNode)))
+                          log.warning("Since this is a dev or stage instance, we're going to assume it's safe to ignore this")
                           done = done + 1
                     else:
                         attempts[instance.id] = attempts[instance.id] + 1
@@ -730,60 +730,60 @@ class AWSController():
         vpsaId = None
         if settings.AWS_PROD_PREFIX in prefix:
             vpsaId = settings.ZADARA_VPSA_PROD_ID
-            self.logger.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
+            log.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
         elif settings.AWS_STG_PREFIX in prefix:
             vpsaId = settings.ZADARA_VPSA_STG_ID
-            self.logger.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
+            log.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
         elif settings.AWS_DEV_PREFIX in prefix:
             vpsaId = settings.ZADARA_VPSA_DEV_ID
-            self.logger.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
+            log.debug("{0} matches Zadara vpsa ID of {1}".format(prefix, vpsaId))
 
         if vpsaId != None:
             while not self.zadara.is_vpsa_stable_state(vpsaId):
-                self.logger.info(
+                log.info(
                     "Waiting for VPSA {0} to be in a stable state".format(vpsaId))
                 time.sleep(30)
             if self.zadara.is_vpsa_down(vpsaId):
-                self.logger.info(
+                log.info(
                     "VPSA with ID {0} is already down".format(str(vpsaId)))
             else:
-                self.logger.info(
+                log.info(
                     "Prefix is {0}, stopping Zadara array {1}".format(prefix, str(vpsaId)))
                 self.zadara.hibernate(vpsaId)
                 while not self.zadara.is_vpsa_down(vpsaId):
-                    self.logger.info(
+                    log.info(
                         "Waiting for VPSA {0} to be down".format(vpsaId))
                     time.sleep(30)
 
     def bringdownCluster(self, prefix):
-        self.logger.info("Bringing down cluster %s " % prefix)
+        log.info("Bringing down cluster %s " % prefix)
         # Get the list of AWS instances
         awsInstances = self.get_tagged_instances(tag=prefix + "*")
         for instance in awsInstances.values():
             for tag in instance.tags.keys():
                 if "hold" == str(tag).lower():
-                    self.logger.info(
+                    log.info(
                         "Instance {0} has hold tag applied, please remove it and try again.".format(instance.id))
                     return
         adminNodes = self.getListOfMatterhornAdminNodes(awsInstances)
         self.putClusterInMaintenance(adminNodes[0], awsInstances)
 
-        self.logger.info("Matterhorn nodes are now idle")
+        log.info("Matterhorn nodes are now idle")
 
         # Shut down then engage (and pub), then workers, then admin, then
         # mysql, then NFS (if applicable), then shut down the backing
         # filesystem
-        self.logger.info("Stopping Matterhorn nodes")
+        log.info("Stopping Matterhorn nodes")
         self.shutdownAwsInstancesBySuffixListAndWait(
             prefix, awsInstances, settings.AWS_MH_SUFFIXES)
 
         # Refresh the instances
         awsInstances = self.get_tagged_instances(tag=prefix + "*")
 
-        self.logger.info("Matterhorn nodes shut down, stopping support nodes")
+        log.info("Matterhorn nodes shut down, stopping support nodes")
         self.shutdownAwsInstancesBySuffixListAndWait(
             prefix, awsInstances, settings.AWS_NON_MH_SUFFIXES)
 
         self.bringDownZadara(prefix)
 
-        self.logger.info("Cluster %s down" % prefix)
+        log.info("Cluster %s down" % prefix)

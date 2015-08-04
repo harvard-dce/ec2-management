@@ -1,4 +1,3 @@
-#TODO: Remove these secrets and squash git history
 
 import dotenv
 from unipath import Path

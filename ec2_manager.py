@@ -1,84 +1,92 @@
 import argparse
+import logging
+import click
 
 import utils
 import settings
 from controllers import AWSController, MatterhornController, ZadaraController
 
+class RunContext(object):
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Control script for HUDCE AWS instances.  Maintenance (-m) commands take precedence over start/stop commands (-c), which in turn take precedence over worker (-w) commands.")
-    instanceGroup = parser.add_argument_group('required instance options', 'Control which AWS instances are worked on.  Pick one or the other.')
-    instanceGroup.add_argument(
-        '-n', '--name', help='The name of the cluster to operate on.  This is a prefix, so something like dev02 is expected')
-
-    parser.add_argument(
-        '-c', '--command', help='The command to issue, currently either start or stop')
-    parser.add_argument('-s', '--state', help='Filter based on state')
-    parser.add_argument(
-        '-m', '--maintenance', help='Control the Matterhorn instances\' maintenance state.  Options are on or off')
-    parser.add_argument('-w', '--workers', type=int,
-                        help='Set the number of workers to have in a cluster.  Effective with either the start command, or alone.')
-    parser.add_argument(
-        '-d', '--dryrun', help='Set this to true to do a dry run', action='store_true', default=False)
-    parser.add_argument(
-        '--force', help='Force the script to shut nodes down, even if they are on prod.  Does not override the dry run setting', action='store_true', default=False)
-    # TODO: Applying tags?
-    args = parser.parse_args()
-    dryrun = args.dryrun
-    command = args.command
-    state = args.state
-    maint = args.maintenance
-    cluster = args.name
-    workers = args.workers
-    force = args.force
-
-    if cluster == None:
-        logPrefix = "ec2_manager-NOCLUSTER"
-        logger = utils.setupLogger(logPrefix)
-        logger.error("No cluster specified!")
-
-    logPrefix = "ec2_manager-" + cluster
-    logger = utils.setupLogger(logPrefix)
-
-    if dryrun:
-        logger.info("Dryrun mode enabled")
-
-    if force:
-        #Use the force Luke
-        logger.info("Force mode enabled")
-
-    if workers != None and workers < 0:
-        logger.error("Number of workers must be zero or greater")
-        return
+    def __init__(self, cluster, dry_run):
+        self.cluster = cluster
+        self.dry_run = dry_run
+        # self.z = ZadaraController(cluster,
+        #                      security_token=settings.ZADARA_ACCOUNT_TOKEN)
+        # self.m = MatterhornController(cluster)
+        # self.aws = AWSController(cluster,
+        #                         region=settings.AWS_REGION,
+        #                         aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        #                         aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        #                         matterhorn_controller=self.m,
+        #                         zadara_controller=self.z)
 
 
+@click.group()
+@click.argument('cluster')
+@click.option('-v/-q','--verbose/--quiet', is_flag=True, default=True)
+@click.option('-d','--debug', is_flag=True)
+@click.option('-n','--dryrun', is_flag=True)
+@click.pass_context
+def cli(ctx, cluster, verbose, debug, dryrun):
+    log_level = debug and logging.DEBUG or logging.INFO
+    log = utils.init_logging(cluster, verbose, log_level)
+    log.debug("Command: %s %s, options: %s",
+              ctx.info_name, ctx.invoked_subcommand, ctx.params)
+    ctx.obj = RunContext(cluster, dryrun)
 
-    # Setup the connection
-    z = ZadaraController(logPrefix, 
-        dry_run=dryrun, security_token=settings.ZADARA_ACCOUNT_TOKEN)
-    m = MatterhornController(logPrefix, dry_run=dryrun)
-    c = AWSController(logPrefix, test=dryrun, force=force, region=settings.AWS_REGION,  aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                           aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY, matterhorn_controller=m, zadara_controller=z)
+@cli.command()
+@click.pass_obj
+def status(ctx_obj):
+    """Display service job/queue status of a cluster"""
+    aws = AWSController(ctx_obj.cluster, dry_run=ctx_obj.dry_run)
+    pass
 
-    try:
-        # Process the commands
-        if command == 'start':
-            c.bringupCluster(cluster, workers)
-        elif command == 'stop':
-            c.bringdownCluster(cluster)
+@cli.command()
+@click.option('-w', '--workers', type=int, prompt=True, default=4)
+@click.pass_context
+def start(ctx, workers):
+    """Start a cluster"""
+    ctx.obj.aws.bringupCluster(ctx.obj.cluster, workers)
 
-        if workers != None:
-            c.ensureClusterHasWorkers(cluster, workers)
+@cli.command()
+@click.pass_context
+def stop(ctx):
+    """Stop a cluster"""
+    ctx.obj.aws.bringdownCluster(ctx.obj.cluster)
 
-        if maint == 'on':
-            targetMaintenanceState = True
-            c.place_cluster_in_maintenance(cluster, targetMaintenanceState)
-        elif maint == 'off':
-            targetMaintenanceState = False
-            c.place_cluster_in_maintenance(cluster, targetMaintenanceState)
-    except Exception as e:
-        logger.exception(e)
+@cli.command()
+@click.pass_context
+def autoscale(ctx):
+    """Autoscale a cluster to the correct number of workers based on currently
+    queued jobs"""
+    pass
+
+@cli.command()
+@click.pass_context
+@click.argument('workers', type=int)
+def scale_to(ctx, workers):
+    """Scale a cluster to a specified number of workers"""
+    ctx.obj.aws.ensureClusterHasWorkers(ctx.obj.cluster, workers)
+
+@cli.command()
+@click.argument('direction', type=click.Choice(['up', 'down']))
+@click.option('-w', '--workers', type=int, prompt=True, default=1)
+@click.pass_context
+def scale(ctx, direction, workers):
+    """Incrementally scale a cluster up/down a specified number of workers"""
+    pass
+
+@cli.command()
+@click.argument('state', type=click.Choice(['on', 'off']))
+@click.pass_context
+def maintenance(ctx, state):
+    """Enable/disable maintenance mode on a cluster"""
+    if state == 'on':
+        ctx.obj.aws.place_cluster_in_maintenance(ctx.obj.cluster, True)
+    elif state == 'off':
+        ctx.obj.aws.place_cluster_in_maintenance(ctx.obj.cluster, False)
+
 
 if __name__ == "__main__":
-    main()
+    cli()
