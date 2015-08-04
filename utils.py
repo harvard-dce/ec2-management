@@ -1,11 +1,15 @@
+from functools import wraps
 import sys
-import pprint
+import json
 import urllib
 import urllib2
 import logging
+from pyloggly import LogglyHandler
 from unipath import Path
 
 import settings
+
+log = logging.getLogger('ec2-manager')
 
 def http_request(server, endpoint, post_data=None, special_request=None, content_type=None):
 
@@ -62,11 +66,12 @@ def init_logging(cluster, verbose, level=logging.INFO):
     log_file = "ec2-manager_{}.log".format(cluster)
     log_path = log_dir.child(log_file)
 
-    log = logging.getLogger()
     log.setLevel(level)
 
-    format=logging.Formatter(
-        '%(asctime)-15s - %(name)s:%(lineno)s - %(levelname)s - %(message)s')
+    format = '%(asctime)-15s - ' + cluster + ' - ' \
+             + '%(levelname)s - %(name)s - ' \
+             + '%(module)s:%(funcName)s:%(lineno)s - %(message)s'
+    format=logging.Formatter(format)
 
     fh = logging.handlers.TimedRotatingFileHandler(log_path, when='D', interval=1)
     fh.setLevel(level)
@@ -75,23 +80,59 @@ def init_logging(cluster, verbose, level=logging.INFO):
 
     if verbose:
         sh = logging.StreamHandler(sys.stdout)
-        sh.setFormatter(format)
+        if level == logging.DEBUG:
+            sh.setFormatter(format)
+        else:
+            sh.setFormatter(logging.Formatter(
+                '%(asctime)-15s - %(levelname)s - ' + cluster + ' - %(message)s'
+            ))
         sh.setLevel(level)
         log.addHandler(sh)
         log.debug("logging to stdout")
 
     log.debug("logging to %s", log_path)
-    return log
+
+    if hasattr(settings, 'LOGGLY_TOKEN'):
+        loggly_handler = LogglyHandler(
+            settings.LOGGLY_TOKEN,
+            settings.LOGGLY_URL,
+            tags=cluster + ',' + settings.LOGGLY_TAGS
+        )
+        log.addHandler(loggly_handler)
+        log.debug("Logging to loggly")
+
+def log_status_summary(stats, msg_prefix=None):
+
+    msg = 'status summary: '
+    if msg_prefix is not None:
+        msg = msg_prefix + ' ' + msg
+
+    msg += "instances: {}, instances online: {}, workers: {}, workers online: {}".format(
+        len(stats['instances']),
+        stats['instances_online'],
+        stats['workers'],
+        stats['workers_online'])
+
+    if 'queued_jobs' in stats:
+        msg += ", queued_jobs: {}, queued_high_load_jobs: {}, running_jobs: {}".format(
+            stats['queued_jobs'],
+            stats['queued_high_load_jobs'],
+            stats['running_jobs'])
+
+    log.info(msg, extra=stats)
+
+def format_status(stats, format):
+    if format == 'json':
+        return json.dumps(stats, indent=True)
+    elif format == 'table':
+        raise NotImplementedError('Ooops! Not implemented yet!')
 
 
-
-def ensureList(thing):
-    if not isinstance(thing, list):
-        return [thing]
-    else:
-        return thing
-
-
-def pretty_print(stuff):
-    pp = pprint.PrettyPrinter(indent=0)
-    pp.pprint(stuff)
+def log_before_after_stats(cmd):
+    @wraps(cmd)
+    def wrapped(ec2, *args, **kwargs):
+        log_status_summary(ec2.status_summary(), 'Before')
+        result = cmd(ec2, *args, **kwargs)
+        log_status_summary(ec2.status_summary(), 'After')
+        return result
+    return wrapped

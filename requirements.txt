@@ -1,6 +1,9 @@
 boto==2.38.0
 python-dotenv==0.1.2
 unipath==1.1
+pyhorn==0.4.0
+wrapt==1.10.5
+click==5.1
 
 # for testing
 mock==1.0.1

@@ -2,18 +2,23 @@
 
 import json
 import logging
+import time
 
 import utils
+import settings
 
 CHANGE_STATES = ['hibernate_offlining', 'hibernating', 'launching', 'booting']
 
-log = logging.getLogger()
+log = logging.getLogger('ec2-manager')
 
 class ZadaraController():
 
-    def __init__(self, logPrefix, security_token=None, dry_run=False):
-        self.security_token = security_token
+    def __init__(self, vpsa_id, security_token=None, dry_run=False):
+        self.vpsa_id = vpsa_id
         self.dry_run = dry_run
+        self.security_token = security_token
+        if self.security_token is None:
+            self.security_token = settings.ZADARA_ACCOUNT_TOKEN
 
     def __zadara_request__(self, endpoint, isPost=False):
         if isPost:
@@ -24,46 +29,69 @@ class ZadaraController():
                 utils.http_request("https://manage.zadarastorage.com", endpoint, content_type="application/json"))
 
     def get_vpsas(self):
-        log.debug("Getting VPSAs for {0}".format(self.security_token))
+        log.debug("Getting VPSAs for token ending in %s", self.security_token[-5:])
         return self.__zadara_request__("/api/vpsas.json?token={0}".format(self.security_token))
 
-    def get_vpsa_state(self, vpsa_id):
-        log.debug("Getting state for VPSA {0}".format(vpsa_id))
-        return self.__zadara_request__("/api/vpsas/{0}.json?token={1}".format(vpsa_id, self.security_token))['vpsa']['status']
+    def get_vpsa_state(self):
+        log.debug("Getting state for VPSA %s", self.vpsa_id)
+        return self.__zadara_request__("/api/vpsas/{0}.json?token={1}".format(self.vpsa_id, self.security_token))['vpsa']['status']
 
-    def is_vpsa_stable_state(self, vpsa_id):
-        if self.get_vpsa_state(vpsa_id) in CHANGE_STATES:
-            return False
-        return True
+    def is_stable_state(self):
+        return self.get_vpsa_state() in CHANGE_STATES
 
-    def is_vpsa_up(self, vpsa_id):
-        if 'created' in self.get_vpsa_state(vpsa_id):
-            return True
+    def is_up(self):
+        return 'created' in self.get_vpsa_state()
+
+    def is_down(self):
+        return 'hibernated' in self.get_vpsa_state()
+
+    def start(self):
+
+        while not self.in_stable_state():
+            log.info("Waiting for VPSA %s to be in a stable state", self.vpsa_id)
+            time.sleep(30)
+        if self.is_up():
+            log.info("VPSA with %s is already up", self.vpsa_id)
         else:
-            return False
+            log.info("Starting Zadara array %s", self.vpsa_id)
+            self.resume()
+            while not self.is_up():
+                log.info("Waiting for VPSA %s to be up", self.vpsa_id)
+                time.sleep(30)
 
-    def is_vpsa_down(self, vpsa_id):
-        if 'hibernated' in self.get_vpsa_state(vpsa_id):
-            return True
-        else:
-            return False
+    def stop(self):
 
-    def hibernate(self, vpsa_id):
-        log.debug("Hibernating VPSA {0}".format(vpsa_id))
-        if not self.dry_run:
-            self.__zadara_request__("/api/vpsas/{0}/hibernate.json?token={1}".format(str(vpsa_id), self.security_token), isPost=True)
-            log.info("Hibernate command for VPSA with ID {0} sent".format(vpsa_id))
-        else:
-            log.info(
-                "Dry run prevented hibernation of VPSA {0}".format(vpsa_id))
-            return "dry_run"
+        while not self.in_stable_state():
+            log.info("Waiting for VPSA %s to be in a stable state", self.vpsa_id)
+            time.sleep(30)
 
-    def resume(self, vpsa_id):
-        log.debug("Resuming VPSA {0}".format(vpsa_id))
-        if not self.dry_run:
-            self.__zadara_request__("/api/vpsas/{0}/restore.json?token={1}".format(str(vpsa_id), self.security_token), isPost=True)
-            log.info("Resume command for VPSA with ID {0} sent".format(vpsa_id))
+        if self.is_down():
+            log.info("VPSA %s is already down", self.vpsa_id)
         else:
-            log.info(
-                "Dry run prevented resume of VPSA {0}".format(vpsa_id))
-            return "dry_run"
+            log.info("Stopping Zadara array %s", self.vpsa_id)
+            self.hibernate()
+            while not self.is_down():
+                log.info("Waiting for VPSA %s to be down", self.vpsa_id)
+                time.sleep(30)
+
+    def hibernate(self):
+
+        log.debug("Hibernating VPSA %s", self.vpsa_id)
+        if self.dry_run:
+            log.info("Dry run prevented hibernation of VPSA %s", self.vpsa_id)
+            return
+
+        self.__zadara_request__("/api/vpsas/{0}/hibernate.json?token={1}".format(str(self.vpsa_id), self.security_token), isPost=True)
+        log.info("Hibernate command for VPSA with ID {0} sent".format(self.vpsa_id))
+
+    def resume(self):
+
+        log.debug("Resuming VPSA {0}".format(self.vpsa_id))
+        if self.dry_run:
+            log.info("Dry run prevented resume of VPSA %s", self.vpsa_id)
+            return
+
+        self.__zadara_request__("/api/vpsas/{0}/restore.json?token={1}".format(str(self.vpsa_id), self.security_token), isPost=True)
+        log.info("Resume command for VPSA with ID {0} sent".format(self.vpsa_id))
+
+

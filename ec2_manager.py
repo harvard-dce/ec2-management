@@ -1,92 +1,133 @@
-import argparse
+#!/usr/bin/env python
+
+import sys
 import logging
+
 import click
+click.disable_unicode_literals_warning = True
 
 import utils
 import settings
-from controllers import AWSController, MatterhornController, ZadaraController
+from controllers import EC2Controller
+from controllers.exceptions import ClusterException
 
-class RunContext(object):
-
-    def __init__(self, cluster, dry_run):
-        self.cluster = cluster
-        self.dry_run = dry_run
-        # self.z = ZadaraController(cluster,
-        #                      security_token=settings.ZADARA_ACCOUNT_TOKEN)
-        # self.m = MatterhornController(cluster)
-        # self.aws = AWSController(cluster,
-        #                         region=settings.AWS_REGION,
-        #                         aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        #                         aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        #                         matterhorn_controller=self.m,
-        #                         zadara_controller=self.z)
+log = logging.getLogger('ec2-manager')
 
 
-@click.group()
+@click.group(chain=True)
 @click.argument('cluster')
 @click.option('-v/-q','--verbose/--quiet', is_flag=True, default=True)
 @click.option('-d','--debug', is_flag=True)
-@click.option('-n','--dryrun', is_flag=True)
+@click.option('-n','--dry_run', is_flag=True)
+@click.option('-f', '--force', is_flag=True)
+@click.version_option(settings.VERSION)
 @click.pass_context
-def cli(ctx, cluster, verbose, debug, dryrun):
+def cli(ctx, cluster, verbose, debug, dry_run, force):
+
     log_level = debug and logging.DEBUG or logging.INFO
-    log = utils.init_logging(cluster, verbose, log_level)
+    utils.init_logging(cluster, verbose, log_level)
     log.debug("Command: %s %s, options: %s",
               ctx.info_name, ctx.invoked_subcommand, ctx.params)
-    ctx.obj = RunContext(cluster, dryrun)
+    if dry_run:
+        log.info("Dry run enabled!")
+
+    ec2 = EC2Controller(cluster, force=force, dry_run=dry_run)
+
+    # attach controller to the context for subcommand use
+    ctx.obj = ec2
+
+@cli.resultcallback()
+def exit_with_code(exit_code, *args, **kwargs):
+    sys.exit(exit_code)
 
 @cli.command()
+@click.option('-f','--format', default='json', type=click.Choice(['json', 'table']))
 @click.pass_obj
-def status(ctx_obj):
-    """Display service job/queue status of a cluster"""
-    aws = AWSController(ctx_obj.cluster, dry_run=ctx_obj.dry_run)
-    pass
+def status(ec2, format):
+    """Output service job/queue status of a cluster"""
+    stats = ec2.status_summary()
+    click.echo(utils.format_status(stats, format))
 
 @cli.command()
 @click.option('-w', '--workers', type=int, prompt=True, default=4)
-@click.pass_context
-def start(ctx, workers):
+@click.pass_obj
+@utils.log_before_after_stats
+def start(ec2, workers):
     """Start a cluster"""
-    ctx.obj.aws.bringupCluster(ctx.obj.cluster, workers)
+    try:
+        ec2.start_cluster(workers)
+        return 0
+    except ClusterException, e:
+        log.error(str(e))
+        click.echo(str(e))
+        return 1
 
 @cli.command()
-@click.pass_context
-def stop(ctx):
+@click.pass_obj
+@utils.log_before_after_stats
+def stop(ec2):
     """Stop a cluster"""
-    ctx.obj.aws.bringdownCluster(ctx.obj.cluster)
+    try:
+        ec2.stop_cluster()
+        return 0
+    except ClusterException, e:
+        log.error(str(e))
+        click.echo(str(e))
+        return 1
 
 @cli.command()
-@click.pass_context
-def autoscale(ctx):
+@click.pass_obj
+@utils.log_before_after_stats
+def autoscale(ec2):
     """Autoscale a cluster to the correct number of workers based on currently
     queued jobs"""
-    pass
+    try:
+        ec2.autoscale()
+        return 0
+    except ClusterException, e:
+        log.error(str(e))
+        click.echo(str(e))
+        return 1
 
 @cli.command()
-@click.pass_context
 @click.argument('workers', type=int)
-def scale_to(ctx, workers):
+@click.pass_obj
+@utils.log_before_after_stats
+def scale_to(ec2, workers):
     """Scale a cluster to a specified number of workers"""
-    ctx.obj.aws.ensureClusterHasWorkers(ctx.obj.cluster, workers)
+    raise NotImplementedError()
 
 @cli.command()
 @click.argument('direction', type=click.Choice(['up', 'down']))
 @click.option('-w', '--workers', type=int, prompt=True, default=1)
-@click.pass_context
-def scale(ctx, direction, workers):
+@click.pass_obj
+@utils.log_before_after_stats
+def scale(ec2, direction, workers):
     """Incrementally scale a cluster up/down a specified number of workers"""
-    pass
+    try:
+        ec2.scale(direction, num_workers=workers)
+        return 0
+    except ClusterException, e:
+        log.error(str(e))
+        click.echo(str(e))
+        return 1
 
 @cli.command()
 @click.argument('state', type=click.Choice(['on', 'off']))
-@click.pass_context
-def maintenance(ctx, state):
+@click.pass_obj
+@utils.log_before_after_stats
+def maintenance(ec2, state):
     """Enable/disable maintenance mode on a cluster"""
-    if state == 'on':
-        ctx.obj.aws.place_cluster_in_maintenance(ctx.obj.cluster, True)
-    elif state == 'off':
-        ctx.obj.aws.place_cluster_in_maintenance(ctx.obj.cluster, False)
-
+    try:
+        if state == 'on':
+            ec2.maintenance_on()
+        elif state == 'off':
+            ec2.maintenance_off()
+        return 0
+    except ClusterException, e:
+        log.error(str(e))
+        click.echo(str(e))
+        return 1
 
 if __name__ == "__main__":
     cli()
