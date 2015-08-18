@@ -69,32 +69,34 @@ class MatterhornControllerTests(unittest.TestCase):
     def test_queued_job_count(self):
         mh = MatterhornController('http://example.edu')
         fake_stats = {
-            'service': [
-                {
-                    'queued': "0",
-                    'serviceRegistration': { 'type': 'foo' }
-                },
-                {
-                    'queued': "1",
-                    'serviceRegistration': { 'type': 'foo' }
-                },
-                {
-                    'queued': "0",
-                    'serviceRegistration': { 'type': 'bar' }
-                },
-                {
-                    'queued': "2",
-                    'serviceRegistration': { 'type': 'bar' }
-                },
-                {
-                    'queued': "5",
-                    'serviceRegistration': { 'type': 'foo' }
-                },
-                {
-                    'queued': "1",
-                    'serviceRegistration': { 'type': 'baz' }
-                }
-            ]
+            'statistics': {
+                'service': [
+                    {
+                        'queued': "0",
+                        'serviceRegistration': { 'type': 'foo' }
+                    },
+                    {
+                        'queued': "1",
+                        'serviceRegistration': { 'type': 'foo' }
+                    },
+                    {
+                        'queued': "0",
+                        'serviceRegistration': { 'type': 'bar' }
+                    },
+                    {
+                        'queued': "2",
+                        'serviceRegistration': { 'type': 'bar' }
+                    },
+                    {
+                        'queued': "5",
+                        'serviceRegistration': { 'type': 'foo' }
+                    },
+                    {
+                        'queued': "1",
+                        'serviceRegistration': { 'type': 'baz' }
+                    }
+                ]
+            }
         }
         mh.client.statistics = Mock(return_value=ServiceStatistics(fake_stats, mh.client))
         self.assertEqual(mh.queued_job_count(), 9)
@@ -111,28 +113,30 @@ class MatterhornControllerTests(unittest.TestCase):
             2: "http://bar"
         }
         fake_stats = {
-            'service': [
-                {
-                    'running': "1",
-                    'serviceRegistration': { 'host': 'http://foo' }
-                },
-                {
-                    'running': "0",
-                    'serviceRegistration': { 'host': 'http://foo' }
-                },
-                {
-                    'running': "0",
-                    'serviceRegistration': { 'host': 'http://bar' }
-                },
-                {
-                    'running': "0",
-                    'serviceRegistration': { 'host': 'http://bar' }
-                },
-                {
-                    'running': "1",
-                    'serviceRegistration': { 'host': 'http://foo' }
-                }
-            ]
+            'statistics': {
+                'service': [
+                    {
+                        'running': "1",
+                        'serviceRegistration': { 'host': 'http://foo' }
+                    },
+                    {
+                        'running': "0",
+                        'serviceRegistration': { 'host': 'http://foo' }
+                    },
+                    {
+                        'running': "0",
+                        'serviceRegistration': { 'host': 'http://bar' }
+                    },
+                    {
+                        'running': "0",
+                        'serviceRegistration': { 'host': 'http://bar' }
+                    },
+                    {
+                        'running': "1",
+                        'serviceRegistration': { 'host': 'http://foo' }
+                    }
+                ]
+            }
         }
         mh.client.statistics = Mock(return_value=ServiceStatistics(fake_stats, mh.client))
         self.assertFalse(mh.is_idle(Mock(id=1)))
