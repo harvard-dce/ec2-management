@@ -232,9 +232,8 @@ class EC2Controller(object):
                 instance.tags['Name'], instance.id,  instance.state,
                 instance.ip_address, instance.private_ip_address))
             instance.start(dry_run=self.dry_run)
-        except EC2ResponseError as e:
-            log.error("Error starting instance: {}".format(
-                traceback.format_exc().splitlines()[-1]))
+        except EC2ResponseError, e:
+            log.error("Error starting instance: %s", e.errors)
 
     def stop_instance(self, instance):
         try:
@@ -242,9 +241,8 @@ class EC2Controller(object):
                 instance.tags['Name'], instance.id,  instance.state,
                 instance.ip_address, instance.private_ip_address))
             instance.stop(dry_run=self.dry_run)
-        except EC2ResponseError as e:
-            log.error("Error stopping instance: {}".format(
-                traceback.format_exc().splitlines()[-1]))
+        except EC2ResponseError, e:
+            log.error("Error stopping instance: %s", e.errors)
 
     def start_support_instances(self, wait=True):
         self.start_instances(self.support_instances, wait)
