@@ -47,6 +47,7 @@ def status(ec2, format):
     """Output service job/queue status of a cluster"""
     stats = ec2.status_summary()
     click.echo(utils.format_status(stats, format))
+    return 0
 
 @cli.command()
 @click.option('-w', '--workers', type=int, prompt=True, default=4)

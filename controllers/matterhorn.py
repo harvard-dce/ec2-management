@@ -37,18 +37,24 @@ class MatterhornController():
     def create_instance_host_map(self, instances):
         hosts = dict((x.base_url, x) for x in self.client.hosts())
 
-        def find_url(inst):
-            candidate_urls = [
-                'http://' + inst.private_ip_address, # most nodes
-                'https://' + inst.public_dns_name # engage nodes
+        def find_host_url(inst):
+            candidate_hosts = [
+                inst.private_ip_address, # most nodes
+                inst.public_dns_name # some public-facing engage nodes
             ]
-            for url in candidate_urls:
-                if url in hosts:
-                    del hosts[url]
-                    return url
+            host_url = None
+            for h in candidate_hosts:
+                for scheme in ['http','https']:
+                    candidate_url = scheme + '://' + h
+                    if candidate_url in hosts:
+                        host_url = candidate_url
+                        del hosts[host_url]
+            # returns the last one found
+            # is assumption correct to prefer https?
+            return host_url
 
         for inst in instances:
-            url = find_url(inst)
+            url = find_host_url(inst)
             if url is not None:
                 self.instance_host_map[inst.id] = url
 
@@ -66,7 +72,7 @@ class MatterhornController():
             # NOTE: this makes a pretty ugly assumption but there's currently no
             # other alternative for associating the engage instance with it's
             # mh node since the engage node's 'host_url' value doesn't
-            # correspond with an ip/dns name attributes of the aws instance
+            # always correspond to an ip/dns name attributes of the aws instance
             self.instance_host_map[unmapped[0].id] = hosts.keys()[0]
 
     def service_stats(self):
