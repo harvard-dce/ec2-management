@@ -4,6 +4,7 @@ unipath==1.1
 pyhorn==0.4.0
 wrapt==1.10.5
 click==5.1
+pyloggly==0.1.0
 
 # for testing
 mock==1.0.1

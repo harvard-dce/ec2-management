@@ -1,73 +1,238 @@
-EC2 Manager Scripts
-===================
+## EC2 Manager Scripts
 
 Allows control over the entire AWS, Matterhorn, Zadara stack.  These scripts 
 are able to start and stop entire clusters, as well as manage the number of 
-workers, and the overall maintenance state of the Matterhorn instances.  Clusters
-where one or more nodes have been tagged with 'hold' as a tag (the value does not
+workers, and the overall maintenance state of the Matterhorn instances.  
+
+### Getting started
+
+1. Git clone this repo and cd into it.
+1. Create a virtual environement: `virtualenv venv && source venv/bin/activate` (optional but recommended)
+1. Install the requirements: `pip install -r requirements.txt`
+1. Check that tests pass: `python runtests.py` (optional)
+1. Create a `.env` file: `cp .env.dist .env`. See **Settings** below for required values.
+
+### Usage
+
+        Usage: ec2_manager.py [OPTIONS] CLUSTER COMMAND1 [ARGS]... [COMMAND2
+                              [ARGS]...]...
+        
+        Options:
+          -v, --verbose / -q, --quiet
+          -d, --debug
+          -n, --dry_run
+          -f, --force
+          --version                    Show the version and exit.
+          --help                       Show this message and exit.
+        
+        Commands:
+          autoscale    Autoscale a cluster to the correct number of...
+          maintenance  Enable/disable maintenance mode on a cluster
+          scale        Incrementally scale a cluster up/down a...
+          scale_to     Scale a cluster to a specified number of...
+          start        Start a cluster
+          status       Output service job/queue status of a cluster
+          stop         Stop a cluster
+
+### General Options
+
+* *-v/--verbose* - sends all logging output to stdout. On by default.
+* *-q/--quiet* - turn off the `--verbose` behavior
+* *-d/--debug* - adds more detailed logging output
+* *-n/--dry_run* - the script will go through the motions but not actually change anything
+* *-f/--force* - ignore some settings and wait timeouts (see more below)
+
+All commands are actually subcommands of the main `ec2_manager.py` program,
+and many take their own arguments and options. The structure
+of the commands is somewhat restrictive in that the general options
+listed above must always come first followed by the name/prefix
+of the cluster, then the actual command and it's arguments and options.
+
+For example, you must do this:
+
+`./ec2-manager.py -v -d dev99 start --workers 3`
+
+This will not work:
+
+`./ec2-manager.py dev99 start -v -d --workers 3`
+
+(If you're curious about the internals, take a gander at the 
+[Click](http://click.pocoo.org/) framework being used. There's 
+a lot to like about it, but also downside in that it's very strict 
+and opinionated about how to build multi-level command interfaces.)
+
+### Subcommands
+
+#### status
+
+Get a json dump of the cluster's status summary. Note that the 
+`--format table` option isn't implemented yet.
+
+    Usage: ec2_manager.py [OPTIONS] cluster status [OPTIONS]
+    
+      Output service job/queue status of a cluster
+    
+    Options:
+      -f, --format [json|table]
+      --help                     Show this message and exit.
+
+#### start
+
+Starts a cluster, including any associated Zadara arrays. 
+Allows starting with a specified number of workers (default = 4).
+
+    Usage: ec2_manager.py [OPTIONS] cluster start [OPTIONS]
+    
+      Start a cluster
+    
+    Options:
+      -w, --workers INTEGER
+      --help  
+      
+#### stop
+
+Stop a cluster, including any associated Zadara arrays.
+
+    Usage: ec2_manager.py [OPTIONS] cluster stop [OPTIONS]
+    
+      Stop a cluster
+    
+    Options:
+      --help  Show this message and exit.
+
+#### autoscale
+
+Start or stop workers based on the status of queued jobs / idleness.
+
+    Usage: ec2_manager.py [OPTIONS] cluster autoscale [OPTIONS]
+    
+      Autoscale a cluster to the correct number of workers based on currently
+      queued jobs
+    
+    Options:
+      --help  Show this message and exit.
+
+#### scale
+
+Turn on/off a specified number of workers. `DIRECTION` can be
+`up` or `down`. By default starts/stops 1 worker.
+
+    Usage: ec2_manager.py [OPTIONS] cluster scale [OPTIONS] DIRECTION
+    
+      Incrementally scale a cluster up/down a specified number of workers
+    
+    Options:
+      -w, --workers INTEGER
+      --help                 Show this message and exit.
+
+
+#### maintenance
+
+Enable or disable maintenance on a cluster. `STATE` can be `on` or `off'.
+
+    Usage: ec2_manager.py [OPTIONS] cluster maintenance [OPTIONS] STATE
+    
+      Enable/disable maintenance mode on a cluster
+    
+    Options:
+      --help  Show this message and exit.
+
+#### scale_to
+
+Not implemented yet. Intended for time-based scaling where you 
+want to scale up/down to a specific number of workers.
+
+### Settings & the .env file
+
+The program reads several configuration settings from the 
+`settings.py` file, which in turn pulls any sensitive (secret) values
+from environment variables. The easiest way to get those 
+variables into the environment is via a `.env` file. 
+
+Copy the provided `.env.dist` file to `.env` and edit.
+
+#### Required
+
+* `MATTERHORN_ADMIN_SERVER_USER`
+* `MATTERHORN_ADMIN_SERVER_PASS`
+* `AWS_ACCESS_KEY_ID`
+* `AWS_SECRET_ACCESS_KEY`
+
+#### Optional
+
+* `LOGGLY_TOKEN` - send log events to loggly
+* `ZADARA_ACCOUNT_TOKEN` - for controlling an associated Zadara array
+
+#### Other settings of note
+
+* `DEFAULT_RETRIES` - how many times the program should loop waiting for a desired state
+* `DEFAULT_WAIT` - how long to sleep between retries
+* `MIN_WORKERS` - minimum number of worker nodes to employ
+* `MAX_WORKERS` - maximum number of worker nodes to employ
+* `MIN_IDLE_WORKERS` - minimum number of idle workers to maintain
+* `MAX_QUEUED_JOBS` - maximum number of queued jobs to allow for auto-scaling calculations
+* `MAJOR_LOAD_SERVICE_TYPES` - types of service jobs to be concerned with during auto-scaling calculations
+
+### The --force option
+
+The `--force` option is currently only applicable to the `stop` 
+and `scale` commands. It has two effects:
+
+1. In the case of the `scale` command, the following settings 
+will be ignored: `MIN_WORKERS`, `MAX_WORKERS`, 
+`MIN_IDLE_WORKERS`. 
+
+2. For both `stop` and `scale`, it prevents the process from 
+halting execution after giving up waiting for something 
+to happen. For example, when stopping a cluster the process
+will normally wait for some amount of time for worker nodes
+to become idle, then give up, raise an exception and quit. With
+`--force` enabled a warning will be logged but the process will
+continue.
+
+### Held instances
+
+Clusters where one or more nodes have been tagged with 'hold' as a tag (the value does not
 matter) are excluded from shutdown commands to allow developers to automatically 
 hold clusters open.
 
-Usage
-------------
+### Zadara arrays
 
-usage: ec2_manager.py [-h] [-n NAME] [-c COMMAND] [-s STATE] [-m MAINTENANCE] [-w WORKERS] [-d]
+### Logging
 
-### Mandatory Arguments
+Logs are written to the `./logs` directory and logfiles are named
+according to the cluster prefix being operated on. The logging
+mechanism uses a `TimedRotatingFileHandler` and rotates the
+log files on a daily basis.
 
-One of 
+#### Loggly
 
-| Argument | Description                                                                         | Examples              |
-|----------|-------------------------------------------------------------------------------------|-----------------------|
-| -n       | Set the prefix of the cluster to work with.This is based on the AWS instance names. | prdAWS, devAWS, dev05 |
+If the `LOGGLY_TOKEN` setting is available the program will
+add an additional log output handler to send events to loggly. 
+Events will can be identified by both the 'ec2-manager' tag and
+a tag corresponding to the cluster prefix.
 
-### Optional Arguments
+#### Before/After status events
 
-| Argument | Description | Example Options  |
-|----------|---------------------------------------------------------|------------------|
-| -c       | The command to execute on against the specified cluster | start, stop      |
-| -s       | Filters the nodes found by their AWS state, useful with -m | running, stopped |
-| -m       | Sets the maintenance state on, or off | on, off          |
-| -w       | Sets the desired number of workers for a cluster.  Can be combined with -c when starting up to only start a given number of workers.  Does not create new workers for you. | 0 to N           |
-| -d       | Dryrun.  Does not change anything, although this will also likely not succeed.  Useful to determine which AWS nodes a given cluster name (-n) up. |                  |
+Prior to and just after each command is executed a log event
+will be emitted containing a summary of the cluster status, including
+number of instances, workers, workers online, etc.
 
+### Cluster naming conventions / assumptions
 
-### Examples
+The following assumptions are made about how ec2 instances 
+are named. 
 
-        ec2_manager.py -n dev04 -c start
+* The instance name value will be stored in the tag 'Name'
+* The instance names will all be prefixed with the name of the cluster.
+e.g., all instance names in the `prdAWS` cluster will begin with `prdAWS-`
+* A cluster will have one admin instance named `[prefix]-admin`
+* Worker nodes will be named `[prefix]-worker`
+* Engage nodes will be named `[prefix]-engage`
+* DB nodes will be named `[prefix]-db`
+* NFS nodes will be named `[prefix]-nfs`
 
-Starts dev04 from a cold state.  This will not hurt anything if dev04 is already running, but it will take all of the Matterhorn nodes out of maintenance mode!  Starts the Zadara array (if applicable), then the AWS nodes, then takes Matterhorn out of maintenance.
-
-        ec2_manager.py -n dev04 -c start -w 0
-
-Starts all of dev04, except for the workers.  Similar to the above.
-
-        ec2_manager.py -n dev04 -c start -w 1
-
-Starts all of dev04, but only one worker.
-
-        ec2_manager.py -n dev04 -w 4
-
-Sets dev04 to have 4 workers total.  Will start/stop workers as required.  Will not create new workers (yet), so if you set the value for w greater than your number of workers it will just start all of them.  Requires the cluster to already be running.
-
-        ec2_manager.py -n dev04 -m on
-
-Sets all Matterhorn nodes on dev04 into maintenance mode.
-
-        ec2_manager.py -n dev04 -m off
-
-Takes all Matterhorn nodes on dev04 out of maintenance.
-
-        ec2_manager.py -n dev04 -c stop
-
-Places all Matterhorn nodes on dev04 into maintenance, then (once there are no more active jobs) shuts down the nodes, and then the Zadara array (if applicable).
-
-
-Note: Some commands have precendence over others.  Currently, the order is:
-
-Commands (-c) are processed first.  If a worker count (-w) is specified with the command it is processed at the same time.  If there is just a worker count specified then it is processed first.  In all cases, maintenance commands (-m) are processed last.
-
-Installation
-------------
-
-Requires Python 2.6+ and Boto (http://boto.readthedocs.org/en/latest/)
+These assumptions hold only for the standard ec2
+Matterhorn clusters; opsworks clusters will use a different
+naming scheme and controlling them will be implemented in a 
+future release.
