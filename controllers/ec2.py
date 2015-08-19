@@ -198,9 +198,11 @@ class EC2Controller(object):
         }
 
         try:
+            log.debug("Trying to fetch stats from Matterhorn")
             stats = self.mh.service_stats()
             mh_is_up = True
-        except:
+        except MatterhornCommunicationException, e:
+            log.debug("Error communicating with Matterhorn: %s", str(e))
             mh_is_up = False
 
         if mh_is_up:
@@ -427,6 +429,9 @@ class EC2Controller(object):
         if self.zadara is None:
             log.info("No Zadara VPSA for this cluster")
             return
+        elif self.dry_run:
+            log.info("Dry-run enabled. Not starting zadara.")
+            return
 
         self.zadara.start()
 
@@ -434,6 +439,9 @@ class EC2Controller(object):
 
         if self.zadara is None:
             log.info("No Zadara VPSA for this cluster")
+            return
+        elif self.dry_run:
+            log.info("Dry-run enabled. Not stopping zadara.")
             return
 
         self.zadara.stop()
