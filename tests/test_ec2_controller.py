@@ -241,8 +241,11 @@ class EC2ControllerTests(unittest.TestCase):
         mock_support.assert_called_once()
         mock_zadara.assert_called_once()
 
-    def test_zadara_init(self):
-        pass
-
-    def test_bring_up_zadara(self):
-        pass
+    def test_autoscale_disabled(self):
+        ec2 = EC2Controller('dev99')
+        ec2._instances = [Mock(state="running", tags={'Name': 'dev99-admin'})]
+        self.assertFalse(ec2.autoscale_disabled())
+        ec2._instances = [Mock(state="running", tags={'Name': 'dev99-admin', 'autoscale': 'on'})]
+        self.assertFalse(ec2.autoscale_disabled())
+        ec2._instances = [Mock(state="running", tags={'Name': 'dev99-admin', 'autoscale': 'Off'})]
+        self.assertTrue(ec2.autoscale_disabled())
