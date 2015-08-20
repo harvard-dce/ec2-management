@@ -1,0 +1,261 @@
+h3. Overview
+
+Please test the new ec2-management v2 script. This program provides a set of commands via a command-line interface (CLI) that perform operations on a Matterhorn ec2 cluster. This is a substantial overhaul of the v1 code and all functionality needs to be reviewed.
+
+The new code is deployed to the "Instance-manager2" ec2 instance, ip 54.85.72.8. To QA you'll need to ssh to that instance as the 'ansible' user and execute a range of command-line operations, then check the resulting state of the cluster being operated on.
+
+I'm not sure what cluster(s) you'll have access to for testing, but to fully test all functionality it needs to be one with an associated Zadara array. Failing that, dev04 is available and has enough workers (4) to test everything else.
+
+h3. Setup
+
+There are a few initial steps that must done prior to actually executing the script commands being tested. You'll need to do these each time you begin QA.
+
+1. ssh to the instance: {{ssh ansible@54.85.72.8}}
+2. change to the right directory: {{cd ~/ec2-management-v2/QA}}
+3. activate the python environment: {{source ../venv/bin/activate}}
+4. unset the default aws credentials: {{unset AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID}}
+
+h3. Assumed settings
+
+You should hopefully not need to modify settings.py. The following settings values are assumed unless otherwise stated below:
+
+* MAX_WORKERS=3
+* MIN_WORKERS=2
+* MIN_IDLE_WORKERS=1
+* MAX_QUEUED_JOBS=0
+
+h3. _dry-run_ enabled
+
+All of the following commands to test should be no-ops if the _dry-run_ option is included, meaning the operation should complete with no actual changes made. To confirm this it might make the most sense to execute each one first with _--dry-run_ and then again for the actual QA test. 
+
+To enable _dry-run_ insert "--dry-run" prior to the cluster prefix, e.g.: {{./ec2_manager.py --dry-run cluster stop}}
+
+h3. cluster prefix
+
+Each command must include the prefix (name) of the cluster. I've gone ahead and assumed {{dev04}} for all of the following examples. If you end up testing on a different cluster you'll need to modify the command.
+
+h3. Commands to test:
+
+h4. cluster status
+
+*Command*: {{./ec2_manager.py dev04 status}}
+
+*Expected result*: a json dump of the cluster status summary should output to the terminal. If the cluster is offline It should include the following values:
+
+* cluster prefix
+* number of instances
+* number of instances online
+* number of workers
+* number of workers online
+* a list of instances, each with the following values:
+** instance id
+** instance name
+** instance state
+
+If the cluster is running the following additional values will be included:
+
+* number of running jobs
+* number of queued jobs
+* number of "high load" jobs
+* each item in the list of instances will also include the node's maintenance state
+
+h4. cluster start
+
+h6. vanilla start
+
+*Preconditions*: all ec2 instances in state "stopped"
+
+*Command*: {{./ec2_manager.py dev04 start}}
+
+*Expected result*: cluster's ec2 instances in "running" state, including admin, engage, db, nfs and default number of workers. Default is whatever settings.MIN_WORKERS is (should be 2).
+
+h6. start with specific number of workers
+
+*Preconditions*: all ec2 instances in state "stopped"
+
+*Command*: {{./ec2_manager.py dev04 start -w 3}}
+
+*Expected result*: all non-worker instances + 3 workers in "running" state
+
+h6. start with too many workers requested
+
+*Preconditions*: all ec2 instances in state "stopped"
+
+*Command*: {{./ec2_manager.py dev04 start -w 5}}
+
+*Expected result*: Process should fail, complaining about not enough workers available.
+
+h4. cluster stop
+
+h6. vanilla stop
+
+*Preconditions*: admin, support instances + _n_ workers in "running" state
+
+*Command*: {{./ec2_manager.py dev04 stop}}
+
+*Expected result*: all instances in "stopped" state
+
+h6. stop w/ held instance
+
+*Preconditions*: admin, support + _n_ workers running. Admin instance ec2 tags include "hold=1"
+
+*Expected result*: Process should fail, complaining about held instances
+
+h6. stop w/ held instance and --force
+
+*Preconditions*: same as previous
+
+*Command*: {{./ec2_manager.py --force dev04 stop}}
+
+*Expected result*: Warning about held instance, but process should continue. All instances in "stopped" state.
+
+h6. stop with non-idle workers
+
+*Preconditions*: admin, support + _n_ workers running. At least one worker processing jobs.
+
+*Command*: {{./ec2_manager.py dev04 stop}}
+
+*Expected result*: process should fail after waiting a bit for workers to be idle
+
+h6. stop with non-idle workers and --force
+
+*Preconditions*: admin, support + _n_ workers running. At least one worker processing jobs.
+
+*Command*: {{./ec2_manager.py --force dev04 stop}}
+
+*Expected result*: warning about retries exceeded, but process should continue. All instances in "stopped" state.
+
+h4. cluster autoscale
+
+h6. idle workers
+
+*Preconditions*: admin, support + 4 workers running. Workers idle.
+
+*Command*: {{./ec2_manager.py dev04 autoscale}}
+
+*Expected result*: 1 worker stopped
+
+h6. idle workers, pt 2
+
+*Preconditions*: admin, support + 3 workers running. Workers idle.
+
+*Command*: {{./ec2_manager.py dev04 autoscale}}
+
+*Expected result*: 1 worker stopped
+
+h6. idle workers, but MIN_WORKERS reached
+
+*Preconditions*: admin, support + 2 workers running. Workers idle.
+
+*Command*: {{./ec2_manager.py dev04 autoscale}}
+
+*Expected result*: warning that MIN_WORKERS setting prevented stopping a worker. No changes.
+
+h6. busy workers
+
+*Preconditions*: admin, support + 2 workers running. Workers busy so that some number of jobs of types _composer_, _inspection_, _videoeditor_, or _videosegmenter_ are queued.
+
+*Command*: {{./ec2_manager.py dev04 autoscale}}
+
+*Expected result*: 1 worker should be started
+
+h6. busy workers but MAX_WORKERS reached
+
+*Preconditions*: admin, support + 3 workers running. Workers busy so that some number of jobs of types _composer_, _inspection_, _videoeditor_, or _videosegmenter_ are queued. 
+
+*Command*: {{./ec2_manager.py dev04 autoscale}}
+
+*Expected result*: warning that MAX_WORKERS setting prevented starting a worker. No changes.
+
+h6. some busy workers but MIN_IDLE_WORKERS reached
+
+*Preconditions*: admin, support + 3 workers running. 2 workers busy, 1 worker idle, no jobs queued.
+
+*Command*: {{./ec2_manager.py dev04 autoscale}}
+
+*Expected result*: No changes.
+
+h4. cluster scale up
+
+h6. vanilla scale up
+
+*Preconditions*: admin, support + 1 worker running.
+
+*Command*: {{./ec2_manager.py dev04 scale up}}
+
+*Expected result*:  1 worker started
+
+h6. scale up _n_ workers
+
+*Preconditions*: admin, support + 1 workers running.
+
+*Command*: {{./ec2_manager.py dev04 scale -w 2 up}}
+
+*Expected result*:  2 workers started
+
+h6. scale up > MAX_WORKERS
+
+*Preconditions*: admin, support + 2 workers running.
+
+*Command*: {{./ec2_manager.py dev04 scale -w 2 up}}
+
+*Expected result*:  process fails complaining about MAX_WORKERS
+
+h4. cluster scale down
+
+h6. vanilla scale down
+
+*Preconditions*: admin, support + 3 workers running.
+
+*Command*: {{./ec2_manager.py dev04 scale down}}
+
+*Expected result*: 1 worker stopped.
+
+h6. scale down _n_ workers
+
+*Preconditions*: admin, support + 4 workers running.
+
+*Command*: {{./ec2_manager.py dev04 scale -w 2 down}}
+
+*Expected result*: 2 workers stopped.
+
+h6. scale down < MIN_WORKERS
+
+*Preconditions*: admin, support + 3 workers running.
+
+*Command*: {{./ec2_manager.py dev04 scale -w 2 down}}
+
+*Expected result*: process fails complaining about MIN_WORKERS
+
+h6. scale down < MIN_WORKERS with --force
+
+*Preconditions*: admin, support + 3 workers running.
+
+*Command*: {{./ec2_manager.py --force dev04 scale -w 2 down}}
+
+*Expected result*: process warns about MIN_WORKERS but proceeds. 2 workers stopped.
+
+h6. scale down, no idle workers
+
+*Preconditions*: admin, support + 3 workers running. All workers busy with running jobs.
+
+*Command*: {{./ec2_manager.py dev04 scale -w 2 down}}
+
+*Expected result*: process fails complaining about no idle workers.
+
+h4. cluster maintenance on
+
+*Preconditions*: admin, support + _n_ workers running. Some or all instances not in maintenance.
+
+*Command*: {{./ec2_manager.py dev04 maintenance on}}
+
+*Expected result*: All nodes in maintenance mode.
+
+h4. cluster maintenance off
+
+*Preconditions*: admin, support + _n_ workers running. Some or all instances in maintenance.
+
+*Command*: {{./ec2_manager.py dev04 maintenance off}}
+
+*Expected result*: All nodes taken out of maintenance mode.
+
