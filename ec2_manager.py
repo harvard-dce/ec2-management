@@ -18,7 +18,7 @@ log = logging.getLogger('ec2-manager')
 @click.argument('cluster')
 @click.option('-v/-q','--verbose/--quiet', is_flag=True, default=True)
 @click.option('-d','--debug', is_flag=True)
-@click.option('-n','--dry_run', is_flag=True)
+@click.option('-n','--dry-run', is_flag=True)
 @click.option('-f', '--force', is_flag=True)
 @click.version_option(settings.VERSION)
 @click.pass_context
@@ -50,11 +50,13 @@ def status(ec2, format):
     return 0
 
 @cli.command()
-@click.option('-w', '--workers', type=int, prompt=True, default=4)
+@click.option('-w', '--workers', type=int)
 @click.pass_obj
 @utils.log_before_after_stats
 def start(ec2, workers):
     """Start a cluster"""
+    if workers is None:
+        workers = settings.MIN_WORKERS
     try:
         ec2.start_cluster(workers)
         return 0

@@ -339,6 +339,13 @@ class EC2Controller(object):
                     )
                 )
 
+        # and not more than our MAX_WORKERS setting
+        if num_workers > settings.MAX_WORKERS:
+            log.warning("%d workers exceeds MAX_WORKERS setting of %d",
+                        num_workers, settings.MAX_WORKERS)
+            if not self.force:
+                raise ClusterException("Aborting. Not allowed to start that many workers.")
+
         log.info("Starting zadara...")
         self.start_zadara()
 
