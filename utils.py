@@ -1,11 +1,13 @@
 from functools import wraps
 import sys
 import json
+import click
 import urllib
 import urllib2
 import logging
 from pyloggly import LogglyHandler
 from unipath import Path
+from controllers.exceptions import ClusterException
 
 import settings
 
@@ -127,7 +129,6 @@ def format_status(stats, format):
     elif format == 'table':
         raise NotImplementedError('Ooops! Not implemented yet!')
 
-
 def log_before_after_stats(cmd):
     @wraps(cmd)
     def wrapped(ec2, *args, **kwargs):
@@ -136,3 +137,19 @@ def log_before_after_stats(cmd):
         log_status_summary(ec2.status_summary(), 'After')
         return result
     return wrapped
+
+def handle_exit(cmd):
+    """
+    execute the command and catch any cluster exceptions. The return value
+    will be used as the arg for sys.exit().
+    """
+    @wraps(cmd)
+    def wrapped(ec2, *args, **kwargs):
+        try:
+            cmd(ec2, *args, **kwargs)
+            return 0
+        except ClusterException, e:
+            log.info(str(e))
+            return str(e)
+    return wrapped
+

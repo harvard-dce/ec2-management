@@ -249,3 +249,20 @@ class EC2ControllerTests(unittest.TestCase):
         self.assertFalse(ec2.autoscale_disabled())
         ec2._instances = [Mock(state="running", tags={'Name': 'dev99-admin', 'autoscale': 'Off'})]
         self.assertTrue(ec2.autoscale_disabled())
+
+    def test_scale_to(self):
+        ec2 = EC2Controller('dev99')
+        ec2._instances = [
+            Mock(state="running", tags={'Name': 'dev99-worker'}),
+            Mock(state="running", tags={'Name': 'dev99-worker'}),
+            Mock(state="running", tags={'Name': 'dev99-worker'})
+        ]
+        self.assertRaises(ClusterException, ec2.scale_to, 3)
+
+        with patch.object(EC2Controller, 'scale_down') as scale_down:
+            ec2.scale_to(1)
+            scale_down.assert_called_with(2)
+
+        with patch.object(EC2Controller, 'scale_up') as scale_up:
+            ec2.scale_to(10)
+            scale_up.assert_called_with(7)

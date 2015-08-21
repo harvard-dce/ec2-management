@@ -480,6 +480,16 @@ class EC2Controller(object):
                 self.scale_down(num_workers=1)
                 return
 
+    def scale_to(self, num_workers):
+
+        running_workers = filter(self.is_running, self.workers)
+        if len(running_workers) == num_workers:
+            raise ClusterException("Cluster already at {} running workers".format(num_workers))
+        elif len(running_workers) > num_workers:
+            self.scale_down(len(running_workers) - num_workers)
+        else:
+            self.scale_up(num_workers - len(running_workers))
+
     def scale(self, direction, num_workers=1):
 
         if direction == "up":
