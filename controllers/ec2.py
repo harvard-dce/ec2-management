@@ -451,7 +451,14 @@ class EC2Controller(object):
 
         self.zadara.stop()
 
+    def autoscale_disabled(self):
+        return "autoscale" in self.admin_instance.tags \
+            and self.admin_instance.tags["autoscale"].lower() == "off"
+
     def autoscale(self):
+
+        if self.autoscale_disabled():
+            raise ScalingException("Autoscaling disabled for this cluster")
 
         with self.in_maintenance(self.workers):
 
