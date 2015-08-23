@@ -59,7 +59,7 @@ def http_request(server, endpoint, post_data=None, special_request=None, content
                         (endpoint, status))
     return response.read()
 
-def init_logging(cluster, verbose, level=logging.INFO):
+def init_logging(cluster, verbose, stdout_level=logging.INFO):
 
     log_dir = Path(__file__).parent.child('logs')
     if not log_dir.exists():
@@ -68,7 +68,7 @@ def init_logging(cluster, verbose, level=logging.INFO):
     log_file = "ec2-manager_{}.log".format(cluster)
     log_path = log_dir.child(log_file)
 
-    log.setLevel(level)
+    log.setLevel(logging.DEBUG)
 
     format = '%(asctime)-15s - ' + cluster + ' - ' \
              + '%(levelname)s - %(name)s - ' \
@@ -76,19 +76,19 @@ def init_logging(cluster, verbose, level=logging.INFO):
     format=logging.Formatter(format)
 
     fh = logging.handlers.TimedRotatingFileHandler(log_path, when='D', interval=1)
-    fh.setLevel(level)
+#    fh.setLevel(logging.DEBUG)
     fh.setFormatter(format)
     log.addHandler(fh)
 
     if verbose:
         sh = logging.StreamHandler(sys.stdout)
-        if level == logging.DEBUG:
+        if stdout_level == logging.DEBUG:
             sh.setFormatter(format)
         else:
             sh.setFormatter(logging.Formatter(
                 '%(asctime)-15s - %(levelname)s - ' + cluster + ' - %(message)s'
             ))
-        sh.setLevel(level)
+        sh.setLevel(stdout_level)
         log.addHandler(sh)
         log.debug("logging to stdout")
 
