@@ -1,7 +1,6 @@
 from functools import wraps
 import sys
 import json
-import click
 import urllib
 import urllib2
 import logging

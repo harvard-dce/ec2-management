@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import logging
 import pyhorn
+# this is a hack until pyhorn can get it's caching controls sorted out
+pyhorn.client._session._is_cache_disabled = True
 
+import logging
 import settings
 from exceptions import *
 
@@ -56,7 +58,10 @@ class MatterhornController():
         for inst in instances:
             url = find_host_url(inst)
             if url is not None:
+                log.debug("Mapping %s to Matterhorn host url %s", inst.id, url)
                 self.instance_host_map[inst.id] = url
+            else:
+                log.debug("Failed to find host url for %s", inst.id)
 
         # check if we missed any hosts (e.g., the engage node usually)
         unmapped = [x for x in instances if x.id not in self.instance_host_map]
@@ -73,6 +78,7 @@ class MatterhornController():
             # other alternative for associating the engage instance with it's
             # mh node since the engage node's 'host_url' value doesn't
             # always correspond to an ip/dns name attributes of the aws instance
+            log.debug("Assuming host url for %s is %s", unmapped[0].id, hosts.keys()[0])
             self.instance_host_map[unmapped[0].id] = hosts.keys()[0]
 
     def service_stats(self):
@@ -90,7 +96,10 @@ class MatterhornController():
     def is_idle(self, inst):
         stats = self.client.statistics()
         host_url = self.instance_host_map[inst.id]
-        return stats.running_jobs(host=host_url) == 0
+        log.debug("Checking idleness state of %s, %s", inst.id, host_url)
+        running_jobs = stats.running_jobs(host=host_url)
+        log.debug("%s has %d running jobs", host_url, running_jobs)
+        return running_jobs == 0
 
     def get_host_for_instance(self, inst):
         hosts = self.client.hosts()
