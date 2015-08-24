@@ -127,6 +127,9 @@ class EC2Controller(object):
         except StopIteration:
             raise ClusterException("Can't find an admin node for your cluster!")
 
+    def admin_is_up(self):
+        return self.is_running(self.admin_instance)
+
     @property
     def support_instances(self):
         return filter(self.is_support, self.instances)
@@ -145,10 +148,6 @@ class EC2Controller(object):
             lambda inst: self.is_running(inst) and self.mh.is_idle(inst),
             self.workers
         )
-
-    @property
-    def running_instances(self):
-        return filter(self.is_running, self.instances)
 
     def instance(self, id):
         try:
@@ -319,25 +318,34 @@ class EC2Controller(object):
     def start_cluster(self, num_workers=None):
         log.info("Bringing up cluster")
 
-        if num_workers is not None:
+        if num_workers is None:
+            num_workers = settings.MIN_WORKERS
 
-            # first check that we have enough workers
-            log.debug("Workers requested: %d; available: %d", num_workers, len(self.workers))
-            if len(self.workers) < num_workers:
-                raise ClusterException(
-                    "Cluster only has {} workers but was asked to start with {}!".format(
-                        len(self.workers), num_workers)
-                )
+        # check that we have enough workers available
+        log.debug("Workers requested: %d; available: %d", num_workers, len(self.workers))
+        if len(self.workers) < num_workers:
+            raise ClusterException(
+                "Cluster only has {} workers but was asked to start with {}!".format(
+                    len(self.workers), num_workers)
+            )
 
-            # but not too many running already
-            running = filter(self.is_running, self.workers)
-            log.debug("Workers already running: %d", len(running))
-            if len(running) > num_workers:
-                raise ClusterException(
-                    "Cluster already has {} running workers but was asked to start with {}!".format(
-                        len(running), num_workers
-                    )
+        # but not too many running already
+        running = filter(self.is_running, self.workers)
+        log.debug("Workers already running: %d", len(running))
+        if len(running) > num_workers:
+            raise ClusterException(
+                "Cluster already has {} running workers but was asked to start with {}!".format(
+                    len(running), num_workers
                 )
+            )
+
+        # not less than MIN_WORKERS setting
+        if num_workers < settings.MIN_WORKERS:
+            log.warning("Workers requested %d is less than MIN_WORKERS %d",
+                        num_workers, settings.MIN_WORKERS)
+            if not self.force:
+                raise ClusterException("Aborting. Cluster must be started with "
+                                       "at least {} workers".format(settings.MIN_WORKERS))
 
         # and not more than our MAX_WORKERS setting
         if num_workers > settings.MAX_WORKERS:
@@ -385,7 +393,7 @@ class EC2Controller(object):
     def stop_support_instances(self, wait=True):
         self.stop_instances(self.support_instances, wait)
 
-    def stop_instances(self, instances, wait):
+    def stop_instances(self, instances, wait=True):
 
         for inst in instances:
             self.stop_instance(inst)
@@ -490,7 +498,10 @@ class EC2Controller(object):
         else:
             self.scale_up(num_workers - len(running_workers))
 
-    def scale(self, direction, num_workers=1):
+    def scale(self, direction, num_workers):
+
+        if num_workers is None:
+            num_workers = 1
 
         if direction == "up":
             self.scale_up(num_workers)
@@ -509,7 +520,7 @@ class EC2Controller(object):
                 "Cluster does not have {} to start!".format(num_workers))
 
         # are we allowed to scale up by num_workers?
-        if len(running) + num_workers >= settings.MAX_WORKERS:
+        if len(running) + num_workers > settings.MAX_WORKERS:
             error_msg = "Starting {} workers violates MAX_WORKERS setting of {}".format(
                 num_workers, settings.MAX_WORKERS
             )
@@ -520,7 +531,8 @@ class EC2Controller(object):
 
         instances_to_start = stopped[:num_workers]
         log.info("Starting %d worker(s)", len(instances_to_start))
-        self.start_instances(instances_to_start, wait=False)
+        self.start_instances(instances_to_start)
+        self.maintenance_off(instances_to_start)
 
     def scale_down(self, num_workers):
 
@@ -551,7 +563,7 @@ class EC2Controller(object):
 
         instances_to_stop = self.idle_workers[:num_workers]
         log.info("Shutting down %d worker(s)", len(instances_to_stop))
-        self.stop_instances(instances_to_stop, wait=False)
+        self.stop_instances(instances_to_stop)
 
     @contextmanager
     def in_maintenance(self, instances=None, restore_state=True):
@@ -600,7 +612,7 @@ class EC2Controller(object):
             return
 
         if instances is None:
-            instances = self.mh_instances
+            instances = filter(self.is_running, self.mh_instances)
 
         state_str = state and "on" or "off"
 

@@ -141,7 +141,10 @@ class EC2ControllerTests(unittest.TestCase):
     @patch.object(EC2Controller, 'start_mh_instances')
     def test_start_cluster(self, mock_mh_inst, mock_wait, mock_supp_inst, mock_maint, mock_zadara):
         ec2 = EC2Controller('dev99')
-        ec2._instances = []
+        ec2._instances = [
+            Mock(tags={'Name': 'dev99-worker'}),
+            Mock(tags={'Name': 'dev99-worker'})
+        ]
         ec2.start_cluster()
         mock_mh_inst.assert_called_once()
         mock_wait.assert_called_once()

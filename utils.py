@@ -152,3 +152,15 @@ def handle_exit(cmd):
             return str(e)
     return wrapped
 
+def admin_is_up(cmd):
+    """
+    confirm that the Matterhorn admin instance is running
+    """
+    @wraps(cmd)
+    def wrapped(ec2, *args, **kwargs):
+        if not ec2.admin_is_up():
+            raise ClusterException(
+                "This command requires the Matterhorn admin instance to be running"
+            )
+        return cmd(ec2, *args, **kwargs)
+    return wrapped

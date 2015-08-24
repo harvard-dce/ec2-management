@@ -5,7 +5,7 @@ from os import getenv as env
 
 dotenv.load_dotenv(Path(__file__).parent.child('.env'))
 
-VERSION = '0.1.0'
+VERSION = '2.0.0'
 DEFAULT_RETRIES = 10
 DEFAULT_WAIT = 10
 

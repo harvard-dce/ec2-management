@@ -48,31 +48,29 @@ def status(ec2, format):
     """Output service job/queue status of a cluster"""
     stats = ec2.status_summary()
     click.echo(utils.format_status(stats, format))
-    return 0
 
 @cli.command()
 @click.option('-w', '--workers', type=int)
 @click.pass_obj
-@utils.log_before_after_stats
 @utils.handle_exit
+@utils.log_before_after_stats
 def start(ec2, workers):
     """Start a cluster"""
-    if workers is None:
-        workers = settings.MIN_WORKERS
     ec2.start_cluster(workers)
 
 @cli.command()
 @click.pass_obj
-@utils.log_before_after_stats
 @utils.handle_exit
+@utils.log_before_after_stats
 def stop(ec2):
     """Stop a cluster"""
     ec2.stop_cluster()
 
 @cli.command()
 @click.pass_obj
-@utils.log_before_after_stats
 @utils.handle_exit
+@utils.admin_is_up
+@utils.log_before_after_stats
 def autoscale(ec2):
     """Autoscale a cluster to the correct number of workers based on currently
     queued jobs"""
@@ -81,18 +79,20 @@ def autoscale(ec2):
 @cli.command()
 @click.argument('workers', type=int)
 @click.pass_obj
-@utils.log_before_after_stats
 @utils.handle_exit
+@utils.admin_is_up
+@utils.log_before_after_stats
 def scale_to(ec2, workers):
     """Scale a cluster to a specified number of workers"""
     ec2.scale_to(workers)
 
 @cli.command()
 @click.argument('direction', type=click.Choice(['up', 'down']))
-@click.option('-w', '--workers', type=int, prompt=True, default=1)
+@click.option('-w', '--workers', type=int, default=1)
 @click.pass_obj
-@utils.log_before_after_stats
 @utils.handle_exit
+@utils.admin_is_up
+@utils.log_before_after_stats
 def scale(ec2, direction, workers):
     """Incrementally scale a cluster up/down a specified number of workers"""
     ec2.scale(direction, num_workers=workers)
@@ -100,8 +100,9 @@ def scale(ec2, direction, workers):
 @cli.command()
 @click.argument('state', type=click.Choice(['on', 'off']))
 @click.pass_obj
-@utils.log_before_after_stats
 @utils.handle_exit
+@utils.admin_is_up
+@utils.log_before_after_stats
 def maintenance(ec2, state):
     """Enable/disable maintenance mode on a cluster"""
     if state == 'on':
