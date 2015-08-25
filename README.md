@@ -171,7 +171,7 @@ Copy the provided `.env.dist` file to `.env` and edit.
 * `MAX_WORKERS` - maximum number of worker nodes to employ
 * `MIN_IDLE_WORKERS` - minimum number of idle workers to maintain
 * `MAX_QUEUED_JOBS` - maximum number of queued jobs to allow for auto-scaling calculations
-* `MAJOR_LOAD_SERVICE_TYPES` - types of service jobs to be concerned with during auto-scaling calculations
+* `MAJOR_LOAD_OPERATION_TYPES` - the types ("id" values) of workflow operations whose jobs we want to consider when calculating autoscaling
 
 ### The --force option
 

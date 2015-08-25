@@ -67,43 +67,70 @@ class MatterhornControllerTests(unittest.TestCase):
         self.assertEqual(stats['foo'], 1)
 
     def test_queued_job_count(self):
+        """
+        mockapalooza!
+        """
         mh = MatterhornController('http://example.edu')
-        fake_stats = {
-            'statistics': {
-                'service': [
-                    {
-                        'queued': "0",
-                        'serviceRegistration': { 'type': 'foo' }
-                    },
-                    {
-                        'queued': "1",
-                        'serviceRegistration': { 'type': 'foo' }
-                    },
-                    {
-                        'queued': "0",
-                        'serviceRegistration': { 'type': 'bar' }
-                    },
-                    {
-                        'queued': "2",
-                        'serviceRegistration': { 'type': 'bar' }
-                    },
-                    {
-                        'queued': "5",
-                        'serviceRegistration': { 'type': 'foo' }
-                    },
-                    {
-                        'queued': "1",
-                        'serviceRegistration': { 'type': 'baz' }
-                    }
-                ]
-            }
-        }
-        mh.client.statistics = Mock(return_value=ServiceStatistics(fake_stats, mh.client))
+        mh.client = Mock()
+        mh.client.workflows.return_value = [
+            Mock(operations=[
+                Mock(id="foo",
+                     state="RUNNING",
+                     job=Mock(children=[
+                         Mock(status="RUNNING"),
+                         Mock(status="QUEUED"),
+                     ])),
+                Mock(id="foo",
+                     state="RUNNING",
+                     job=Mock(children=[
+                         Mock(status="RUNNING"),
+                         Mock(status="QUEUED")
+                     ])),
+            ]),
+            Mock(operations=[
+                Mock(id="foo",
+                     state="RUNNING",
+                     job=Mock(children=[
+                         Mock(status="QUEUED"),
+                         Mock(status="QUEUED")
+                     ])),
+                Mock(id="bar",
+                     state="RUNNING",
+                     job=Mock(children=[
+                         Mock(status="QUEUED"),
+                         Mock(status="QUEUED")
+                     ])),
+                Mock(id="foo",
+                     state="INSTANTIATED")
+            ]),
+            Mock(operations=[
+                Mock(id="foo",
+                     state="INSTANTIATED"),
+                Mock(id="foo",
+                     state="RUNNING",
+                     job=Mock(children=[
+                         Mock(status="RUNNING"),
+                         Mock(status="RUNNING")
+                     ])),
+                Mock(id="bar",
+                     state="WAITING",
+                     job=Mock(children=[
+                         Mock(status="QUEUED"),
+                         Mock(status="QUEUED")
+                     ])),
+                Mock(id="baz",
+                     state="RUNNING",
+                     job=Mock(children=[
+                         Mock(status="RUNNING"),
+                         Mock(status="QUEUED")
+                     ]))
+            ])
+        ]
         self.assertEqual(mh.queued_job_count(), 9)
-        self.assertEqual(mh.queued_job_count(service_types=["foo"]), 6)
-        self.assertEqual(mh.queued_job_count(service_types=["foo", "bar"]), 8)
-        self.assertEqual(mh.queued_job_count(service_types=["foo", "bar", "baz"]), 9)
-        return
+        self.assertEqual(mh.queued_job_count(operation_types=["foo"]), 4)
+        self.assertEqual(mh.queued_job_count(operation_types=["bar"]), 4)
+        self.assertEqual(mh.queued_job_count(operation_types=["foo","bar"]), 8)
+        self.assertEqual(mh.queued_job_count(operation_types=["foo","bar","baz"]), 9)
 
     def test_is_idle(self):
 

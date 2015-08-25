@@ -22,12 +22,7 @@ MIN_WORKERS = 2
 # autoscale settings
 MAX_QUEUED_JOBS = 0
 MIN_IDLE_WORKERS = 1
-MAJOR_LOAD_SERVICE_TYPES = [
-    'org.opencastproject.composer',
-    'org.opencastproject.inspection',
-    'org.opencastproject.videoeditor',
-    'org.opencastproject.videosegmenter'
-]
+MAJOR_LOAD_OPERATION_TYPES = ["compose", "editor", "inspect", "video-segment"]
 
 #AWS bits
 AWS_REGION = 'us-east-1'
