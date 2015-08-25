@@ -127,6 +127,10 @@ h6. stop with non-idle workers and --force
 
 h4. cluster autoscale
 
+For the "busy worker" tests it may be difficult to asses whether any jobs are actually queued since the Matterhorn statistics interface does not correctly report them. I think the best method is to use the {{status}} command which will output information on "queued_jobs" and "queued_high_load_jobs". It's the 2nd value that will trigger the autoscaling in the "up" direction.
+
+{{./ec2_manager.py dev04 status}}
+
 h6. idle workers
 
 *Preconditions*: admin, support + 4 workers running. Workers idle.
@@ -259,3 +263,36 @@ h4. cluster maintenance off
 
 *Expected result*: All nodes taken out of maintenance mode.
 
+h4. cluster scale_to
+
+h6. scale_to _n_ workers
+
+*Preconditions*: admin, support + 1 workers running (use AWS console to shut off all but 1 worker)
+
+*Command*: {{./ec2_manager.py dev04 scale_to 3}}
+
+*Expected result*: 2 workers are started
+
+h6. scale_to _n_ workers, pt 2
+
+*Preconditions*: admin, support + 4 workers running (use AWS console to start all workers)
+
+*Command*: {{./ec2_manager.py dev04 scale_to 2}}
+
+*Expected result*: 2 workers are stopped
+
+h6. scale_to > MAX_WORKERS
+
+*Preconditions*: admin, support + 2 workers running
+
+*Command*: {{./ec2_manager.py dev04 scale_to 4}}
+
+*Expected result*: process fails complaning about exceeding MAX_WORKERS
+
+h6. scale_to < MIN_WORKERS
+
+*Preconditions*: admin, support + 3 workers running
+
+*Command*: {{./ec2_manager.py dev04 scale_to 1}}
+
+*Expected result*: process fails complaning about exceeding MIN_WORKERS

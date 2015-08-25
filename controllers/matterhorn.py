@@ -117,11 +117,11 @@ class MatterhornController():
 
     def maintenance_off(self, inst):
         host = self.get_host_for_instance(inst)
-        log.debug("Setting maintenance to off for %s", host)
+        log.debug("Setting maintenance to off for %s, %s", inst.id, host.base_url)
         host.set_maintenance(False)
 
     def maintenance_on(self, inst):
         host = self.get_host_for_instance(inst)
-        log.debug("Setting maintenance to on for %s", host)
+        log.debug("Setting maintenance to on for %s, %s", inst.id, host.base_url)
         host.set_maintenance(True)
 
