@@ -208,7 +208,7 @@ class EC2Controller(object):
             summary.update({
                 'queued_jobs': self.mh.queued_job_count(),
                 'queued_high_load_jobs': self.mh.queued_job_count(
-                    service_types=settings.MAJOR_LOAD_SERVICE_TYPES
+                    operation_types=settings.MAJOR_LOAD_OPERATION_TYPES
                 ),
                 'running_jobs': stats.running_jobs(),
             })
@@ -471,11 +471,11 @@ class EC2Controller(object):
         with self.in_maintenance(self.workers):
 
             queued_jobs = self.mh.queued_job_count(
-                service_types=settings.MAJOR_LOAD_SERVICE_TYPES
+                operation_types=settings.MAJOR_LOAD_OPERATION_TYPES
             )
-            log.debug("%d queued jobs of type(s) %s.",
+            log.debug("%d queued jobs of operation type(s) %s.",
                       queued_jobs,
-                      settings.MAJOR_LOAD_SERVICE_TYPES
+                      settings.MAJOR_LOAD_OPERATION_TYPES
                       )
             if queued_jobs > settings.MAX_QUEUED_JOBS:
                 log.info("Attempting to scale up.")

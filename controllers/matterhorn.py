@@ -84,14 +84,29 @@ class MatterhornController():
     def service_stats(self):
         return self.client.statistics()
 
-    def queued_job_count(self, service_types=None):
-        stats = self.client.statistics()
-        if service_types is None:
-            return stats.queued_jobs()
-        else:
-            return sum(
-                stats.queued_jobs(type=type) for type in service_types
-            )
+    def queued_job_count(self, operation_types=None):
+
+        # get the running workflows; high "count" value to make sure we get all
+        running_wfs = self.client.workflows(state="RUNNING", count=1000)
+
+        # then get their running operations
+        running_ops = []
+        for wf in running_wfs:
+            running_ops.extend(filter(
+                lambda x: x.state in ["RUNNING","WAITING"],
+                wf.operations
+            ))
+
+        # filter for the operation types we're interested in
+        if operation_types is not None:
+            running_ops = filter(lambda x: x.id in operation_types, running_ops)
+
+        # now get any queued child jobs of those operations
+        queued_jobs = []
+        for op in running_ops:
+            queued_jobs.extend(filter(lambda x: x.status == "QUEUED", op.job.children))
+
+        return len(queued_jobs)
 
     def is_idle(self, inst):
         stats = self.client.statistics()
