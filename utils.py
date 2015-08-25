@@ -4,6 +4,7 @@ import json
 import urllib
 import urllib2
 import logging
+import arrow
 from pyloggly import LogglyHandler
 from unipath import Path
 from controllers.exceptions import ClusterException
@@ -164,3 +165,12 @@ def admin_is_up(cmd):
             )
         return cmd(ec2, *args, **kwargs)
     return wrapped
+
+def billed_minutes(inst):
+    launch_time = arrow.get(inst.launch_time)
+    now = arrow.utcnow()
+    if launch_time > now:
+        raise RuntimeError("Launch time from the future?!?")
+    uptime_minutes = (now - launch_time).seconds / 60
+    return uptime_minutes % 60
+

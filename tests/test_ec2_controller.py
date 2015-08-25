@@ -4,11 +4,10 @@ import unittest
 import boto.ec2
 from boto.exception import EC2ResponseError
 from moto import mock_ec2
-from mock import Mock, patch
+from mock import Mock, patch, PropertyMock
 from wrapt import ObjectProxy
-from controllers.exceptions import ClusterException
+from controllers.exceptions import ClusterException, ScalingException
 
-import settings
 from controllers import EC2Controller
 
 class EC2ControllerTests(unittest.TestCase):
@@ -269,3 +268,105 @@ class EC2ControllerTests(unittest.TestCase):
         with patch.object(EC2Controller, 'scale_up') as scale_up:
             ec2.scale_to(10)
             scale_up.assert_called_with(7)
+
+    def test_billing_minutes(self):
+
+        from utils import billed_minutes
+        from freezegun import freeze_time
+
+        with freeze_time('2015-08-25T20:00:00.000Z'):
+            self.assertEqual(billed_minutes(Mock(launch_time='2015-08-25T19:41:56.000Z')), 18)
+            self.assertEqual(billed_minutes(Mock(launch_time='2015-08-24T19:21:56.000Z')), 38)
+            self.assertEqual(billed_minutes(Mock(launch_time='2015-08-24T09:21:56.000Z')), 38)
+
+        with freeze_time('2015-08-25T00:01:00.000Z'):
+            self.assertEqual(billed_minutes(Mock(launch_time='2015-08-25T00:00:00.000Z')), 1)
+            self.assertEqual(billed_minutes(Mock(launch_time='2015-08-25T00:01:00.000Z')), 0)
+            self.assertRaises(RuntimeError, billed_minutes, Mock(launch_time='2015-08-25T00:04:00.000Z'))
+
+    def test_scale_down_no_running_workers(self):
+
+        ec2 = EC2Controller('dev99')
+        ec2._instances = [
+            Mock(tags={'Name': 'dev99-worker'})
+        ]
+        self.assertRaisesRegexp(ScalingException, "1 running workers", ec2.scale_down, 1)
+
+    @patch('controllers.ec2.settings', autospec=True)
+    def test_scale_down_min_workers(self, mock_settings):
+
+        ec2 = EC2Controller('dev99')
+        ec2._instances = [
+            Mock(tags={'Name': 'dev99-worker'}, state="running"),
+            Mock(tags={'Name': 'dev99-worker'}, state="running")
+        ]
+        mock_settings.MIN_WORKERS = 2
+        self.assertRaisesRegexp(ScalingException, 'violates MIN_WORKERS', ec2.scale_down, 1)
+
+    @patch.object(EC2Controller, 'idle_workers', new_callable=PropertyMock)
+    @patch('controllers.ec2.settings', autospec=True)
+    def test_scale_down_no_idle_workers(self, mock_settings, mock_idle):
+        ec2 = EC2Controller('dev99')
+        ec2._instances = [
+            Mock(tags={'Name': 'dev99-worker'}, state="running"),
+            Mock(tags={'Name': 'dev99-worker'}, state="running")
+        ]
+        mock_idle.return_value = []
+        mock_settings.MIN_WORKERS = 0
+        self.assertRaisesRegexp(ScalingException, "1 idle workers to stop", ec2.scale_down, 1)
+
+    @patch.object(EC2Controller, 'idle_workers', new_callable=PropertyMock)
+    @patch.object(EC2Controller, 'stop_instances')
+    @patch('controllers.ec2.settings', autospec=True)
+    @patch('controllers.ec2.billed_minutes')
+    def test_scale_down_billing_check(self, mock_minutes, mock_settings, mock_stop, mock_idle):
+        ec2 = EC2Controller('dev99')
+        workers = [
+            Mock(id=1, tags={'Name': 'dev99-worker'},
+                 state="running"),
+            Mock(id=2, tags={'Name': 'dev99-worker'},
+                 state="running"),
+            Mock(id=3, tags={'Name': 'dev99-worker'},
+                 state="running"),
+        ]
+        ec2._instances = workers
+        mock_idle.return_value = workers
+        mock_settings.MIN_WORKERS = 0
+        mock_settings.IDLE_INSTANCE_UPTIME_THRESHOLD = 50
+        mock_minutes.side_effect = [10, 20, 30]
+        self.assertRaisesRegexp(ScalingException, "No workers available", ec2.scale_down, 1)
+
+        mock_minutes.reset_mock()
+        mock_minutes.side_effect = [10, 52, 25]
+        ec2.scale_down(1)
+        args, kwargs = mock_stop.call_args
+        # stop_instances should have been called with the 2nd mock instance
+        self.assertEqual(len(args[0]), 1)
+        self.assertEqual(args[0][0].id, 2)
+
+        mock_minutes.reset_mock()
+        mock_minutes.side_effect = [10, 52, 25]
+        # should still scale down 1
+        ec2.scale_down(2)
+        args, kwargs = mock_stop.call_args
+        self.assertEqual(len(args[0]), 1)
+        self.assertEqual(args[0][0].id, 2)
+
+        mock_minutes.reset_mock()
+        mock_minutes.side_effect = [18, 52, 55]
+        # should get the one with the most billed minutes
+        ec2.scale_down(1)
+        args, kwargs = mock_stop.call_args
+        # stop_instances should have been called with the 3rd mock instance
+        self.assertEqual(len(args[0]), 1)
+        self.assertEqual(args[0][0].id, 3)
+
+        mock_minutes.reset_mock()
+        mock_minutes.side_effect = [18, 52, 55]
+        # should get the one with the most billed minutes
+        ec2.scale_down(2)
+        args, kwargs = mock_stop.call_args
+        # stop_instances should have been called with the 3rd & 2nd mock instance
+        self.assertEqual(len(args[0]), 2)
+        self.assertEqual(args[0][0].id, 3)
+        self.assertEqual(args[0][1].id, 2)

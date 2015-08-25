@@ -24,6 +24,9 @@ MAX_QUEUED_JOBS = 0
 MIN_IDLE_WORKERS = 1
 MAJOR_LOAD_OPERATION_TYPES = ["compose", "editor", "inspect", "video-segment"]
 
+# this should be tweaked based on frequency of any autoscale cron jobs
+IDLE_INSTANCE_UPTIME_THRESHOLD = 55
+
 #AWS bits
 AWS_REGION = 'us-east-1'
 AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')

@@ -3,8 +3,8 @@ import re
 import sys
 import time
 import logging
-import traceback
 from wrapt import ObjectProxy
+from operator import itemgetter
 from contextlib import contextmanager
 
 import boto.ec2.networkinterface
@@ -14,6 +14,7 @@ import settings
 from exceptions import *
 from zadara import ZadaraController
 from matterhorn import MatterhornController
+from utils import billed_minutes
 
 log = logging.getLogger('ec2-manager')
 
@@ -554,14 +555,36 @@ class EC2Controller(object):
             else:
                 raise ScalingException(error_msg)
 
-        if len(self.idle_workers) < num_workers:
+        idle = self.idle_workers
+        if len(idle) < num_workers:
             raise ScalingException(
                 "Cluster does not have {} idle workers to stop".format(
                     num_workers
                 )
             )
 
-        instances_to_stop = self.idle_workers[:num_workers]
+        # only stop idle workers if they're approaching an uptime near to being
+        # divisible by 60m since we're paying for the full hour anyway
+        instances_to_stop = []
+        stop_candidates = dict((x, billed_minutes(x)) for x in idle)
+        # sort so we get the longest-up first
+        stop_candidates = sorted(stop_candidates.iteritems(), key=itemgetter(1), reverse=True)
+        for inst, minutes in stop_candidates:
+            log.debug("Instance %s has used %d minutes of it's billing hour",
+                      inst.id, minutes)
+            if minutes < settings.IDLE_INSTANCE_UPTIME_THRESHOLD:
+                if self.force:
+                    log.warning("Stopping %s anyway because --force", inst.id)
+                else:
+                    log.debug("Not stopping %s", inst.id)
+                    continue
+            instances_to_stop.append(inst)
+            if len(instances_to_stop) == num_workers:
+                break
+
+        if not len(instances_to_stop):
+            raise ScalingException("No workers available to stop")
+
         log.info("Shutting down %d worker(s)", len(instances_to_stop))
         self.stop_instances(instances_to_stop)
 

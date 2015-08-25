@@ -5,8 +5,10 @@ pyhorn==0.4.0
 wrapt==1.10.5
 click==5.1
 pyloggly==0.1.0
+arrow==0.6.0
 
 # for testing
 mock==1.0.1
 moto==0.4.7
 pytest==2.7.2
+freezegun==0.3.5
