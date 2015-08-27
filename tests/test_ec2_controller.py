@@ -318,7 +318,7 @@ class EC2ControllerTests(unittest.TestCase):
     @patch.object(EC2Controller, 'idle_workers', new_callable=PropertyMock)
     @patch.object(EC2Controller, 'stop_instances')
     @patch('controllers.ec2.settings', autospec=True)
-    @patch('controllers.ec2.billed_minutes')
+    @patch('controllers.ec2.utils.billed_minutes')
     def test_scale_down_billing_check(self, mock_minutes, mock_settings, mock_stop, mock_idle):
         ec2 = EC2Controller('dev99')
         workers = [

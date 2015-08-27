@@ -8,12 +8,13 @@ from mock import patch
 from click.testing import CliRunner
 
 import utils
-import controllers
 import ec2_manager
-from ec2_manager import cli
+from ec2_manager import cli, handle_exit
+from controllers.ec2 import log_before_after_stats, admin_is_up
+import controllers
 
 @patch.object(utils, 'init_logging', autospec=True)
-@patch.object(ec2_manager, 'EC2Controller', autospec=True)
+@patch.object(ec2_manager.ec2, 'EC2Controller', autospec=True)
 class CliTests(unittest.TestCase):
 
     def setUp(self):
@@ -29,7 +30,7 @@ class CliTests(unittest.TestCase):
         # fake command for testing before/after summary log
         @click.command()
         @click.pass_obj
-        @utils.log_before_after_stats
+        @log_before_after_stats
         def bar(ec2):
             pass
         cli.add_command(bar)
@@ -38,7 +39,7 @@ class CliTests(unittest.TestCase):
         @click.command()
         @click.option('--exc_type', default=None)
         @click.pass_obj
-        @utils.handle_exit
+        @handle_exit
         def baz(ec2, exc_type=None):
             if exc_type is None:
                 pass

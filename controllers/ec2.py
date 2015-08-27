@@ -6,17 +6,40 @@ import logging
 from wrapt import ObjectProxy
 from operator import itemgetter
 from contextlib import contextmanager
+from functools import wraps
 
 import boto.ec2.networkinterface
 from boto.exception import EC2ResponseError
 
+import utils
 import settings
 from exceptions import *
 from zadara import ZadaraController
 from matterhorn import MatterhornController
-from utils import billed_minutes
 
 log = logging.getLogger('ec2-manager')
+
+def admin_is_up(cmd):
+    """
+    confirm that the Matterhorn admin instance is running
+    """
+    @wraps(cmd)
+    def wrapped(ec2, *args, **kwargs):
+        if not ec2.admin_is_up():
+            raise ClusterException(
+                "This command requires the Matterhorn admin instance to be running"
+            )
+        return cmd(ec2, *args, **kwargs)
+    return wrapped
+
+def log_before_after_stats(cmd):
+    @wraps(cmd)
+    def wrapped(ec2, *args, **kwargs):
+        utils.log_status_summary(ec2.status_summary(), 'Before')
+        result = cmd(ec2, *args, **kwargs)
+        utils.log_status_summary(ec2.status_summary(), 'After')
+        return result
+    return wrapped
 
 class EC2Controller(object):
 
@@ -566,7 +589,7 @@ class EC2Controller(object):
         # only stop idle workers if they're approaching an uptime near to being
         # divisible by 60m since we're paying for the full hour anyway
         instances_to_stop = []
-        stop_candidates = dict((x, billed_minutes(x)) for x in idle)
+        stop_candidates = dict((x, utils.billed_minutes(x)) for x in idle)
         # sort so we get the longest-up first
         stop_candidates = sorted(stop_candidates.iteritems(), key=itemgetter(1), reverse=True)
         for inst, minutes in stop_candidates:

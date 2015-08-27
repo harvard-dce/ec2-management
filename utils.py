@@ -129,43 +129,6 @@ def format_status(stats, format):
     elif format == 'table':
         raise NotImplementedError('Ooops! Not implemented yet!')
 
-def log_before_after_stats(cmd):
-    @wraps(cmd)
-    def wrapped(ec2, *args, **kwargs):
-        log_status_summary(ec2.status_summary(), 'Before')
-        result = cmd(ec2, *args, **kwargs)
-        log_status_summary(ec2.status_summary(), 'After')
-        return result
-    return wrapped
-
-def handle_exit(cmd):
-    """
-    execute the command and catch any cluster exceptions. The return value
-    will be used as the arg for sys.exit().
-    """
-    @wraps(cmd)
-    def wrapped(ec2, *args, **kwargs):
-        try:
-            cmd(ec2, *args, **kwargs)
-            return 0
-        except ClusterException, e:
-            log.info(str(e))
-            return str(e)
-    return wrapped
-
-def admin_is_up(cmd):
-    """
-    confirm that the Matterhorn admin instance is running
-    """
-    @wraps(cmd)
-    def wrapped(ec2, *args, **kwargs):
-        if not ec2.admin_is_up():
-            raise ClusterException(
-                "This command requires the Matterhorn admin instance to be running"
-            )
-        return cmd(ec2, *args, **kwargs)
-    return wrapped
-
 def billed_minutes(inst):
     launch_time = arrow.get(inst.launch_time)
     now = arrow.utcnow()
