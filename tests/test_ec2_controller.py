@@ -334,11 +334,11 @@ class EC2ControllerTests(unittest.TestCase):
         mock_settings.MIN_WORKERS = 0
         mock_settings.IDLE_INSTANCE_UPTIME_THRESHOLD = 50
         mock_minutes.side_effect = [10, 20, 30]
-        self.assertRaisesRegexp(ScalingException, "No workers available", ec2.scale_down, 1)
+        self.assertRaisesRegexp(ScalingException, "No workers available", ec2.scale_down, 1, check_uptime=True)
 
         mock_minutes.reset_mock()
         mock_minutes.side_effect = [10, 52, 25]
-        ec2.scale_down(1)
+        ec2.scale_down(1, check_uptime=True)
         args, kwargs = mock_stop.call_args
         # stop_instances should have been called with the 2nd mock instance
         self.assertEqual(len(args[0]), 1)
@@ -347,7 +347,7 @@ class EC2ControllerTests(unittest.TestCase):
         mock_minutes.reset_mock()
         mock_minutes.side_effect = [10, 52, 25]
         # should still scale down 1
-        ec2.scale_down(2)
+        ec2.scale_down(2, check_uptime=True)
         args, kwargs = mock_stop.call_args
         self.assertEqual(len(args[0]), 1)
         self.assertEqual(args[0][0].id, 2)
@@ -355,7 +355,7 @@ class EC2ControllerTests(unittest.TestCase):
         mock_minutes.reset_mock()
         mock_minutes.side_effect = [18, 52, 55]
         # should get the one with the most billed minutes
-        ec2.scale_down(1)
+        ec2.scale_down(1, check_uptime=True)
         args, kwargs = mock_stop.call_args
         # stop_instances should have been called with the 3rd mock instance
         self.assertEqual(len(args[0]), 1)
@@ -364,9 +364,10 @@ class EC2ControllerTests(unittest.TestCase):
         mock_minutes.reset_mock()
         mock_minutes.side_effect = [18, 52, 55]
         # should get the one with the most billed minutes
-        ec2.scale_down(2)
+        ec2.scale_down(2, check_uptime=True)
         args, kwargs = mock_stop.call_args
         # stop_instances should have been called with the 3rd & 2nd mock instance
         self.assertEqual(len(args[0]), 2)
         self.assertEqual(args[0][0].id, 3)
         self.assertEqual(args[0][1].id, 2)
+

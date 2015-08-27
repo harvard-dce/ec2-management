@@ -182,23 +182,26 @@ class EC2Controller(object):
     @property
     def zadara(self):
         if not hasattr(self, '_zadara'):
-            if settings.AWS_PROD_PREFIX in self.prefix:
-                vpsa_id = settings.ZADARA_VPSA_PROD_ID
-                log.debug("{0} matches Zadara vpsa ID of {1}".format(self.prefix, vpsa_id))
-            elif settings.AWS_STG_PREFIX in self.prefix:
-                vpsa_id = settings.ZADARA_VPSA_STG_ID
-                log.debug("{0} matches Zadara vpsa ID of {1}".format(self.prefix, vpsa_id))
-            elif settings.AWS_DEV_PREFIX in self.prefix:
-                vpsa_id = settings.ZADARA_VPSA_DEV_ID
-                log.debug("{0} matches Zadara vpsa ID of {1}".format(self.prefix, vpsa_id))
-            else:
-                vpsa_id = None
-                log.debug("No matchting Zadara vpsa ID for {}".format(self.prefix))
+            # disable zadara control for now
+            self._zadara = None
 
-            if vpsa_id is None:
-                self._zadara = None
-            else:
-                self._zadara = ZadaraController(vpsa_id)
+            # if settings.AWS_PROD_PREFIX in self.prefix:
+            #     vpsa_id = settings.ZADARA_VPSA_PROD_ID
+            #     log.debug("{0} matches Zadara vpsa ID of {1}".format(self.prefix, vpsa_id))
+            # elif settings.AWS_STG_PREFIX in self.prefix:
+            #     vpsa_id = settings.ZADARA_VPSA_STG_ID
+            #     log.debug("{0} matches Zadara vpsa ID of {1}".format(self.prefix, vpsa_id))
+            # elif settings.AWS_DEV_PREFIX in self.prefix:
+            #     vpsa_id = settings.ZADARA_VPSA_DEV_ID
+            #     log.debug("{0} matches Zadara vpsa ID of {1}".format(self.prefix, vpsa_id))
+            # else:
+            #     vpsa_id = None
+            #     log.debug("No matchting Zadara vpsa ID for {}".format(self.prefix))
+            #
+            # if vpsa_id is None:
+            #     self._zadara = None
+            # else:
+            #     self._zadara = ZadaraController(vpsa_id)
 
         return self._zadara
 
@@ -509,7 +512,7 @@ class EC2Controller(object):
             log.debug("%d idle workers", len(self.idle_workers))
             if len(self.idle_workers) > settings.MIN_IDLE_WORKERS:
                 log.info("Attempting to scale down.")
-                self.scale_down(num_workers=1)
+                self.scale_down(num_workers=1, check_uptime=True)
                 return
 
     def scale_to(self, num_workers):
@@ -558,7 +561,7 @@ class EC2Controller(object):
         self.start_instances(instances_to_start)
         self.maintenance_off(instances_to_start)
 
-    def scale_down(self, num_workers):
+    def scale_down(self, num_workers, check_uptime=False):
 
         running = filter(self.is_running, self.workers)
 
@@ -586,27 +589,30 @@ class EC2Controller(object):
                 )
             )
 
-        # only stop idle workers if they're approaching an uptime near to being
-        # divisible by 60m since we're paying for the full hour anyway
-        instances_to_stop = []
-        stop_candidates = dict((x, utils.billed_minutes(x)) for x in idle)
-        # sort so we get the longest-up first
-        stop_candidates = sorted(stop_candidates.iteritems(), key=itemgetter(1), reverse=True)
-        for inst, minutes in stop_candidates:
-            log.debug("Instance %s has used %d minutes of it's billing hour",
-                      inst.id, minutes)
-            if minutes < settings.IDLE_INSTANCE_UPTIME_THRESHOLD:
-                if self.force:
-                    log.warning("Stopping %s anyway because --force", inst.id)
-                else:
-                    log.debug("Not stopping %s", inst.id)
-                    continue
-            instances_to_stop.append(inst)
-            if len(instances_to_stop) == num_workers:
-                break
+        if not check_uptime:
+            instances_to_stop = idle[:num_workers]
+        else:
+            # only stop idle workers if they're approaching an uptime near to being
+            # divisible by 60m since we're paying for the full hour anyway
+            instances_to_stop = []
+            stop_candidates = dict((x, utils.billed_minutes(x)) for x in idle)
+            # sort so we get the longest-up first
+            stop_candidates = sorted(stop_candidates.iteritems(), key=itemgetter(1), reverse=True)
+            for inst, minutes in stop_candidates:
+                log.debug("Instance %s has used %d minutes of it's billing hour",
+                          inst.id, minutes)
+                if minutes < settings.IDLE_INSTANCE_UPTIME_THRESHOLD:
+                    if self.force:
+                        log.warning("Stopping %s anyway because --force", inst.id)
+                    else:
+                        log.debug("Not stopping %s", inst.id)
+                        continue
+                instances_to_stop.append(inst)
+                if len(instances_to_stop) == num_workers:
+                    break
 
-        if not len(instances_to_stop):
-            raise ScalingException("No workers available to stop")
+            if not len(instances_to_stop):
+                raise ScalingException("No workers available to stop")
 
         log.info("Shutting down %d worker(s)", len(instances_to_stop))
         self.stop_instances(instances_to_stop)
