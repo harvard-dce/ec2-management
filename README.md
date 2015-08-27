@@ -139,8 +139,15 @@ Enable or disable maintenance on a cluster. `STATE` can be `on` or `off'.
 
 #### scale_to
 
-Not implemented yet. Intended for time-based scaling where you 
-want to scale up/down to a specific number of workers.
+Intended for time-based scaling where you want to scale up/down to a specific number of workers.
+
+    Usage: ec2_manager.py [OPTIONS] cluster scale_to [OPTIONS] WORKERS
+    
+      Scale a cluster to a specified number of workers
+    
+    Options:
+      --help  Show this message and exit.
+
 
 ### Settings & the .env file
 
@@ -196,7 +203,40 @@ Clusters where one or more nodes have been tagged with 'hold' as a tag (the valu
 matter) are excluded from shutdown commands to allow developers to automatically 
 hold clusters open.
 
+### `autoscale` details
+
+#### Logic
+
+The `autoscale` command is a simplified horizontal scaling mechanism. It examines
+the state of the cluster and then, based on that info decides whether to start or
+stop an instance. If it sees that there are "idle" workers, i.e., worker nodes that
+have no running jobs, it will attempt to stop 1 instance. If it sees that there
+are "high load" jobs in the queue it will attempt to start 1 instance. It is intended
+to be run as a cron job with a frequency of 2-5 minutes.
+      
+#### Disabling
+
+The autoscale command checks for the presence of an 
+ec2 instance tag, `autoscale`. If present with a value of "off" the autoscale 
+command will exit without performing any actions.
+
+#### Billing considerations
+
+When an ec2 instance is started it is billed for 1 hour of usage, regardless of how
+much of that hour it is actually running. Therefore, it is potentially costly to
+be "flapping" instances up and down on a minute-by-minute basis. To avoid this, 
+once the `autoscale` process has identified idle workers, it then looks at how 
+long the instances have been "up" and rejects those whose uptime calculations 
+indicate the instance has not used the bulk of it's billed hour. The threshold 
+of what constitutes "the bulk of it's billed hour" is defined by 
+`settings.IDLE_INSTANCE_UPTIME_THRESHOLD` (currently 50 mintues). For example, 
+if an instance is seen to have only been up for 40 minutes (or 1:40, 3:33, etc.) 
+it will not be shut down even if idle. If it has been up for 53 minutes (or 1:53, 
+5:53, etc.) it will be shut down.
+
 ### Zadara arrays
+
+Control of Zadara arrays is currently disabled.
 
 ### Logging
 

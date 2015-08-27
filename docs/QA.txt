@@ -127,27 +127,46 @@ h6. stop with non-idle workers and --force
 
 h4. cluster autoscale
 
-For the "busy worker" tests it may be difficult to asses whether any jobs are actually queued since the Matterhorn statistics interface does not correctly report them. I think the best method is to use the {{status}} command which will output information on "queued_jobs" and "queued_high_load_jobs". It's the 2nd value that will trigger the autoscaling in the "up" direction.
+h6. Notes
+
+For the "busy worker" tests it may be difficult to asses whether any jobs are actually queued since the Matterhorn statistics interface does not correctly report them. I think the best method is to use the {{status}} command which will output information on "queued_jobs" and "queued_high_load_jobs". It's the "queued_high_load_jobs" value that will trigger the autoscaling in the "up" direction.
 
 {{./ec2_manager.py dev04 status}}
 
-h6. idle workers
+When testing autoscale there is an additional aspect that comes into play when shutting down idle workers. When an ec2 instance is started it gets billed for a full hour of uptime, even if it is subsequently shut down 5 minutes later. Therefore, once the process has confirmed that there are idle workers, it then looks at how long the instances have been "up" and rejects those whose uptime calculations indicate the instance has not used the bulk of it's billed hour. The threshold of what constitutes "the bulk of it's billed hour" is defined by {{settings.IDLE_INSTANCE_UPTIME_THRESHOLD}} (currently 50 mintues). For example, if an instance is seen to have only been up for 40 minutes (or 1:40, 3:33, etc.) it will not be shut down even if idle. If it has been up for 53 minutes (or 1:53, 5:53, etc.) it will be shut down.
 
-*Preconditions*: admin, support + 4 workers running. Workers idle.
+It's easy to manipulate the clock within unittests to test this logic, but in manual QA tests it means in some cases you will need to perform some precondition setup, then wait for _x_ minutes of instance uptime before running the command and confirming the expected behavior. Alternatively, you could tweak the {{settings.IDLE_INSTANCE_UPTIME_THRESHOLD}} value to something like 5 if you're comfortable doing so.
+
+This billing-avoidance strategy only comes into play when scaling down; the autoscale tests for going in the other direction you don't need to
+Finally, it might be helpful to run these commands with the {{--debug}} flag to get the extra output/info about what's going on under the hood.
+
+h6. idle workers, recently started
+
+*Preconditions*: admin, support + 4 workers running. Workers idle. Instance uptime < {{settings.IDLE_INSTANCE_UPTIME_THRESHOLD}}
 
 *Command*: {{./ec2_manager.py dev04 autoscale}}
 
-*Expected result*: 1 worker stopped
+*Expected result*: No changes. Output complains no workers available to stop.
 
-h6. idle workers, pt 2
+h6. idle workers, not-so-recently started
 
-*Preconditions*: admin, support + 3 workers running. Workers idle.
+*Preconditions*: admin, support + 4 workers running. Workers idle. Instance uptime > {{settings.IDLE_INSTANCE_UPTIME_THRESHOLD}}
+
+*Command*: {{./ec2_manager.py dev04 autoscale}}
+
+*Expected result*: 1 worker stopped.
+
+h6. idle workers, not-so-recently started, pt 2
+
+*Preconditions*: admin, support + 3 workers running. Workers idle. Instance uptime > {{settings.IDLE_INSTANCE_UPTIME_THRESHOLD}}
 
 *Command*: {{./ec2_manager.py dev04 autoscale}}
 
 *Expected result*: 1 worker stopped
 
 h6. idle workers, but MIN_WORKERS reached
+
+The MIN_WORKERS check happens before the uptime check, so instance uptime shouldn't matter here.
 
 *Preconditions*: admin, support + 2 workers running. Workers idle.
 
