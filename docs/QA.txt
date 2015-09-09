@@ -266,6 +266,14 @@ h6. scale down, no idle workers
 
 *Expected result*: process fails complaining about no idle workers.
 
+h6. scale down, no idle workers + --force
+
+*Preconditions*: admin, support + 3 workers running. All workers busy with running jobs.
+
+*Command*: {{./ec2_manager.py --force dev04 scale -w 2 down}}
+
+*Expected result*: process warns about no idle workers but shuts down 2 anyway.
+
 h4. cluster maintenance on
 
 *Preconditions*: admin, support + _n_ workers running. Some or all instances not in maintenance.

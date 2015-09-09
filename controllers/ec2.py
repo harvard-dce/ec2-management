@@ -7,6 +7,7 @@ from wrapt import ObjectProxy
 from operator import itemgetter
 from contextlib import contextmanager
 from functools import wraps
+from requests.exceptions import ConnectTimeout
 
 import boto.ec2.networkinterface
 from boto.exception import EC2ResponseError
@@ -227,7 +228,7 @@ class EC2Controller(object):
             log.debug("Trying to fetch stats from Matterhorn")
             stats = self.mh.service_stats()
             mh_is_up = True
-        except MatterhornCommunicationException, e:
+        except (ConnectTimeout,MatterhornCommunicationException), e:
             log.debug("Error communicating with Matterhorn: %s", str(e))
             mh_is_up = False
 
@@ -581,21 +582,25 @@ class EC2Controller(object):
             else:
                 raise ScalingException(error_msg)
 
-        idle = self.idle_workers
-        if len(idle) < num_workers:
-            raise ScalingException(
-                "Cluster does not have {} idle workers to stop".format(
-                    num_workers
-                )
+        stop_candidates = self.idle_workers
+        if len(stop_candidates) < num_workers:
+            error_msg = "Cluster does not have {} idle workers to stop".format(
+                num_workers
             )
+            if self.force:
+                log.warning(error_msg)
+                # just pick from running workers
+                stop_candidates = filter(self.is_running, self.workers)
+            else:
+                raise ScalingException(error_msg)
 
         if not check_uptime:
-            instances_to_stop = idle[:num_workers]
+            instances_to_stop = stop_candidates[:num_workers]
         else:
             # only stop idle workers if they're approaching an uptime near to being
             # divisible by 60m since we're paying for the full hour anyway
             instances_to_stop = []
-            stop_candidates = dict((x, utils.billed_minutes(x)) for x in idle)
+            stop_candidates = dict((x, utils.billed_minutes(x)) for x in stop_candidates)
             # sort so we get the longest-up first
             stop_candidates = sorted(stop_candidates.iteritems(), key=itemgetter(1), reverse=True)
             for inst, minutes in stop_candidates:
