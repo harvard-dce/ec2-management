@@ -14,7 +14,7 @@ from controllers.ec2 import log_before_after_stats, admin_is_up
 import controllers
 
 @patch.object(utils, 'init_logging', autospec=True)
-@patch.object(ec2_manager.ec2, 'EC2Controller', autospec=True)
+@patch.object(ec2_manager, 'EC2Controller', autospec=True)
 class CliTests(unittest.TestCase):
 
     def setUp(self):

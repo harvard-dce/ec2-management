@@ -9,7 +9,9 @@ click.disable_unicode_literals_warning = True
 
 import utils
 import settings
-from controllers import ec2, ClusterException
+from controllers import ec2, ClusterException, \
+    EC2Controller, \
+    OpsworksController
 
 log = logging.getLogger('ec2-manager')
 
@@ -28,16 +30,16 @@ def handle_exit(cmd):
             return str(e)
     return wrapped
 
-
 @click.group(chain=True)
 @click.argument('prefix')
 @click.option('-v/-q','--verbose/--quiet', is_flag=True, default=True)
 @click.option('-d','--debug', is_flag=True)
 @click.option('-n','--dry-run', is_flag=True)
 @click.option('-f', '--force', is_flag=True)
+@click.option('-o', '--opsworks', is_flag=True)
 @click.version_option(settings.VERSION)
 @click.pass_context
-def cli(ctx, prefix, verbose, debug, dry_run, force):
+def cli(ctx, prefix, verbose, debug, dry_run, force, opsworks):
 
     log_level = debug and logging.DEBUG or logging.INFO
     utils.init_logging(prefix, verbose, log_level)
@@ -46,7 +48,11 @@ def cli(ctx, prefix, verbose, debug, dry_run, force):
     if dry_run:
         log.info("Dry run enabled!")
 
-    cluster = ec2.EC2Controller(prefix, force=force, dry_run=dry_run)
+    if opsworks:
+        cluster = OpsworksController(prefix, force=force, dry_run=dry_run)
+        ctx.meta['opsworks'] = True
+    else:
+        cluster = EC2Controller(prefix, force=force, dry_run=dry_run)
 
     # attach controller to the context for subcommand use
     ctx.obj = cluster
@@ -68,6 +74,7 @@ def status(cluster, format):
 @cli.command()
 @click.option('-w', '--workers', type=int)
 @click.pass_obj
+@utils.opsworks_verboten
 @handle_exit
 @ec2.log_before_after_stats
 def start(cluster, workers):
@@ -76,6 +83,7 @@ def start(cluster, workers):
 
 @cli.command()
 @click.pass_obj
+@utils.opsworks_verboten
 @handle_exit
 @ec2.log_before_after_stats
 def stop(cluster):

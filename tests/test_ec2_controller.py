@@ -5,7 +5,6 @@ import boto.ec2
 from boto.exception import EC2ResponseError
 from moto import mock_ec2
 from mock import Mock, patch, PropertyMock
-from wrapt import ObjectProxy
 from controllers.exceptions import ClusterException, ScalingException
 
 from controllers import EC2Controller
@@ -172,56 +171,6 @@ class EC2ControllerTests(unittest.TestCase):
         mock_supp_inst.assert_called_once()
         mock_maint.assert_called_once()
         mock_zadara.assert_called_once()
-
-    @patch.object(EC2Controller, 'get_instances')
-    def test_refresh_instances(self, mock_method):
-        orig_mocks = [
-            Mock(id=1, tags={'Name': 'dev99-nfs'}),
-            Mock(id=2, tags={'Name': 'dev99-admin'}),
-            Mock(id=3, tags={'Name': 'dev99-db'}),
-            Mock(id=4, tags={'Name': 'dev99-engage'}),
-            Mock(id=5, tags={'Name': 'dev99-worker'}),
-            Mock(id=6, state="stopped", tags={'Name': 'dev99-worker'})
-            ]
-        mock_method.return_value = orig_mocks
-        ec2 = EC2Controller('dev99')
-        self.assertIsInstance(ec2.instances[0], ObjectProxy)
-
-        # get a subset of the instances
-        mh_instances = ec2.mh_instances
-        workers = filter(ec2.is_worker, mh_instances)
-        self.assertEqual(workers[1].state, "stopped")
-
-        # supply a new set of "instances"
-        new_mocks = [
-            Mock(id=1, tags={'Name': 'dev99-nfs'}),
-            Mock(id=2, tags={'Name': 'dev99-admin'}),
-            Mock(id=3, tags={'Name': 'dev99-db'}),
-            Mock(id=4, tags={'Name': 'dev99-engage'}),
-            Mock(id=5, tags={'Name': 'dev99-worker'}),
-            Mock(id=6, state="running", tags={'Name': 'dev99-worker'})
-        ]
-        mock_method.return_value = new_mocks
-        ec2.refresh_instances()
-
-        # check that we're dealing with new proxied objects
-        self.assertNotEqual(
-            mh_instances[0].__hash__(),
-            orig_mocks[1].__hash__()
-        )
-        # check that our subsets contain the refreshed proxies
-        self.assertEqual(
-            mh_instances[0].__hash__(),
-            new_mocks[1].__hash__()
-        )
-        self.assertEqual(
-            workers[0].__hash__(),
-            new_mocks[4].__hash__()
-        )
-        # see, we didn't touch the workers list but it's instances
-        # reflect the new state
-        self.assertEqual(workers[1].state, "running")
-
 
     def test_stop_held_cluster(self):
         ec2 = EC2Controller('dev99')

@@ -41,8 +41,9 @@ class MatterhornController():
 
         def find_host_url(inst):
             candidate_hosts = [
-                inst.private_ip_address, # most nodes
-                inst.public_dns_name # some public-facing engage nodes
+                inst.private_ip_address,
+                inst.public_dns_name,
+                inst.private_dns_name
             ]
             host_url = None
             for h in candidate_hosts:
@@ -66,11 +67,11 @@ class MatterhornController():
         # check if we missed any hosts (e.g., the engage node usually)
         unmapped = [x for x in instances if x.id not in self.instance_host_map]
         if len(hosts) != len(unmapped) or len(hosts) > 1 or len(unmapped) > 1:
-            # big trouble
-            raise MatterhornControllerException(
-                "Unmappable instances <-> mh hosts!: {}".format(
+            # maybe trouble
+            log.warn(
+                "Unmappable instances <-> mh hosts!: instances: {}, mh hosts: {}".format(
                     ','.join(x.tags['Name'] for x in unmapped),
-                    ','.join(x.base_url for x in hosts)
+                    ','.join(x for x in hosts.keys())
                 )
             )
         elif len(hosts) == len(unmapped) == 1:
