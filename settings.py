@@ -5,47 +5,36 @@ from os import getenv as env
 
 dotenv.load_dotenv(Path(__file__).parent.child('.env'))
 
-VERSION = '2.0.0'
-DEFAULT_RETRIES = 10
-DEFAULT_WAIT = 10
+VERSION = '2.1.0'
 
-#Matterhorn credentials and http bits
+# Matterhorn credentials and http bits
 MATTERHORN_HEADERS     = { 'X-REQUESTED-AUTH' : 'Digest', 'X-Opencast-Matterhorn-Authorization' : 'true' }
 MATTERHORN_REALM       = 'Opencast Matterhorn'
 MATTERHORN_ADMIN_SERVER_USER = env('MATTERHORN_ADMIN_SERVER_USER')
 MATTERHORN_ADMIN_SERVER_PASS = env('MATTERHORN_ADMIN_SERVER_PASS')
 
+NON_MH_SUFFIXES = ["-nfs", "-db", "-mysql"]
+MH_SUFFIXES = ["-admin", "-worker", "-engage"]
 
-MAX_WORKERS = 10
-MIN_WORKERS = 2
-
-# autoscale settings
-MAX_QUEUED_JOBS = 0
-MIN_IDLE_WORKERS = 1
 MAJOR_LOAD_OPERATION_TYPES = ["compose", "editor", "inspect", "video-segment"]
 
-# this should be tweaked based on frequency of any autoscale cron jobs
-IDLE_INSTANCE_UPTIME_THRESHOLD = 55
+# scaling settings
+EC2M_MAX_WORKERS = env('EC2M_MAX_WORKERS', 10)
+EC2M_MIN_WORKERS = env('EC2M_MIN_WORKERS', 2)
+EC2M_MAX_QUEUED_JOBS = env('EC2M_MAX_QUEUED_JOBS', 0)
+EC2M_MIN_IDLE_WORKERS = env('EC2M_MIN_IDLE_WORKERS', 0)
+EC2M_IDLE_UPTIME_THRESHOLD = env('EC2M_IDLE_UPTIME_THRESHOLD', 55) # this should be tweaked based on frequency of any autoscale cron jobs
+
+EC2M_WAIT_RETRIES = env('EC2M_WAIT_RETRIES', 10)
+EC2M_WAIT_TIME = env('EC2M_WAIT_TIME', 10)
 
 #AWS bits
-AWS_REGION = 'us-east-1'
+AWS_REGION = env('AWS_REGION', 'us-east-1')
 AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY')
 
-AWS_PROD_PREFIX="prdAWS"
-AWS_STG_PREFIX="stgAWS"
-AWS_DEV_PREFIX="devAWS"
-
-AWS_NON_MH_SUFFIXES = ["-nfs", "-db", "-mysql"]
-AWS_MH_SUFFIXES = ["-admin", "-worker", "-engage"]
-AWS_PUBLIC_SUFFIXES = ["-pub", "-public"]
-AWS_SUFFIXES = AWS_NON_MH_SUFFIXES + AWS_MH_SUFFIXES
-
-#Zadara bits
-ZADARA_ACCOUNT_TOKEN = env('ZADARA_ACCOUNT_TOKEN')
-ZADARA_VPSA_PROD_ID = '4834'
-ZADARA_VPSA_STG_ID = '4727'
-ZADARA_VPSA_DEV_ID = '4667'
+ZADARA_TOKEN = env('ZADARA_TOKEN')
+ZADARA_VPSA_ID = env('ZADARA_VPSA_ID')
 
 LOGGLY_TOKEN = env('LOGGLY_TOKEN')
 LOGGLY_URL = 'logs-01.loggly.com'

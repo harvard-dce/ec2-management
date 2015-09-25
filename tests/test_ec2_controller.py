@@ -20,13 +20,6 @@ class EC2ControllerTests(unittest.TestCase):
 
         self.ec2_mock = mock_ec2()
         self.ec2_mock.start()
-        #
-        # # add some instances
-        # conn = boto.ec2.connect_to_region('us-east-1')
-        # conn.run_instances('ami-6e9ecc06').instances[0].add_tag('Name', 'dev99-admin')
-        # conn.run_instances('ami-6e9ecc06').instances[0].add_tag('Name', 'dev99-engage')
-        # conn.run_instances('ami-6e9ecc06').instances[0].add_tag('Name', 'dev99-worker')
-        # conn.run_instances('ami-6e9ecc06').instances[0].add_tag('Name', 'dev99-worker')
 
     def tearDown(self):
         self.ec2_mock.stop()
@@ -55,6 +48,17 @@ class EC2ControllerTests(unittest.TestCase):
         mock_daa.side_effect = EC2ResponseError('401', 'No ec2 for you!')
         ec2 = EC2Controller('dev99')
         self.assertRaises(SystemExit, ec2.create_connection)
+
+    def test_instance_tag(self):
+
+        ec2 = EC2Controller('dev99')
+        ec2._admin = Mock(tags={
+            'foo': 'bar',
+        })
+        self.assertEqual(ec2.instance_tag('foo'), 'bar')
+        self.assertEqual(ec2.instance_tag('foo', 'baz'), 'bar')
+        self.assertIsNone(ec2.instance_tag('baz'))
+        self.assertEqual(ec2.instance_tag('baz', 2), 2)
 
     # have to use direct patch here as moto_ec2 doesn't support matching
     # tags using wildcards
@@ -245,12 +249,11 @@ class EC2ControllerTests(unittest.TestCase):
 
     def test_autoscale_disabled(self):
         ec2 = EC2Controller('dev99')
-        ec2._instances = [Mock(state="running", tags={'Name': 'dev99-admin'})]
-        self.assertFalse(ec2.autoscale_disabled())
-        ec2._instances = [Mock(state="running", tags={'Name': 'dev99-admin', 'autoscale': 'on'})]
-        self.assertFalse(ec2.autoscale_disabled())
-        ec2._instances = [Mock(state="running", tags={'Name': 'dev99-admin', 'autoscale': 'Off'})]
-        self.assertTrue(ec2.autoscale_disabled())
+        ec2._admin = Mock(tags={'Name': 'dev99-admin'})
+        self.assertFalse(ec2.autoscale_off)
+        ec2._admin = Mock(tags={'Name': 'dev99-admin', 'ec2m:autoscale_off': 1})
+        self.assertTrue(ec2.autoscale_off)
+        self.assertRaises(ScalingException, ec2.autoscale)
 
     def test_scale_to(self):
         ec2 = EC2Controller('dev99')
@@ -298,10 +301,11 @@ class EC2ControllerTests(unittest.TestCase):
         ec2 = EC2Controller('dev99')
         ec2._instances = [
             Mock(tags={'Name': 'dev99-worker'}, state="running"),
+            Mock(tags={'Name': 'dev99-worker'}, state="running"),
             Mock(tags={'Name': 'dev99-worker'}, state="running")
         ]
-        mock_settings.MIN_WORKERS = 2
-        self.assertRaisesRegexp(ScalingException, 'violates MIN_WORKERS', ec2.scale_down, 1)
+        mock_settings.EC2M_MIN_WORKERS = 3
+        self.assertRaisesRegexp(ScalingException, 'violates min workers', ec2.scale_down, 1)
 
     @patch.object(EC2Controller, 'idle_workers', new_callable=PropertyMock)
     @patch('controllers.ec2.settings', autospec=True)
@@ -312,14 +316,14 @@ class EC2ControllerTests(unittest.TestCase):
             Mock(tags={'Name': 'dev99-worker'}, state="running")
         ]
         mock_idle.return_value = []
-        mock_settings.MIN_WORKERS = 0
+        mock_settings.EC2M_MIN_WORKERS = 0
         self.assertRaisesRegexp(ScalingException, "1 idle workers to stop", ec2.scale_down, 1)
 
     @patch.object(EC2Controller, 'idle_workers', new_callable=PropertyMock)
     @patch.object(EC2Controller, 'stop_instances')
-    @patch('controllers.ec2.settings', autospec=True)
     @patch('controllers.ec2.utils.billed_minutes')
-    def test_scale_down_billing_check(self, mock_minutes, mock_settings, mock_stop, mock_idle):
+    @patch('controllers.ec2.settings', autospec=True)
+    def test_scale_down_billing_check(self, mock_settings, mock_minutes, mock_stop, mock_idle):
         ec2 = EC2Controller('dev99')
         workers = [
             Mock(id=1, tags={'Name': 'dev99-worker'},
@@ -330,9 +334,9 @@ class EC2ControllerTests(unittest.TestCase):
                  state="running"),
         ]
         ec2._instances = workers
+        mock_settings.EC2M_MIN_WORKERS = 0
+        mock_settings.EC2M_IDLE_UPTIME_THRESHOLD = 50
         mock_idle.return_value = workers
-        mock_settings.MIN_WORKERS = 0
-        mock_settings.IDLE_INSTANCE_UPTIME_THRESHOLD = 50
         mock_minutes.side_effect = [10, 20, 30]
         self.assertRaisesRegexp(ScalingException, "No workers available", ec2.scale_down, 1, check_uptime=True)
 
