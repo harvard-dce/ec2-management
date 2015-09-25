@@ -119,6 +119,18 @@ class EC2Controller(object):
         for idx, inst in enumerate(self._instances):
             inst.__wrapped__ = fresh_instances[idx]
 
+    def instance_tag(self, tag, default=None):
+        if tag in self.admin_instance.tags:
+            log.debug(
+                "Found instance tag %s, value: %s", tag, self.admin_instance.tags[tag]
+            )
+            return self.admin_instance.tags[tag]
+        return default
+
+    @property
+    def autoscale_off(self):
+        return self.instance_tag('ec2m:autoscale_off', False)
+
     def is_admin(self, instance):
         return instance.tags['Name'].endswith('admin')
 
@@ -128,11 +140,11 @@ class EC2Controller(object):
     def is_worker(self, instance):
         return instance.tags['Name'].endswith('worker')
 
-    _support_pattern = re.compile('(' + '|'.join(settings.AWS_NON_MH_SUFFIXES) + ')$')
+    _support_pattern = re.compile('(' + '|'.join(settings.NON_MH_SUFFIXES) + ')$')
     def is_support(self, instance):
         return re.search(self._support_pattern, instance.tags['Name'])
 
-    _mh_pattern = re.compile('(' + '|'.join(settings.AWS_MH_SUFFIXES) + ')$')
+    _mh_pattern = re.compile('(' + '|'.join(settings.MH_SUFFIXES) + ')$')
     def is_mh(self, instance):
         return re.search(self._mh_pattern, instance.tags['Name'])
 
@@ -147,10 +159,12 @@ class EC2Controller(object):
 
     @property
     def admin_instance(self):
-        try:
-            return next(x for x in self.instances if self.is_admin(x))
-        except StopIteration:
-            raise ClusterException("Can't find an admin node for your cluster!")
+        if not hasattr(self, '_admin'):
+            try:
+                self._admin = next(x for x in self.instances if self.is_admin(x))
+            except StopIteration:
+                raise ClusterException("Can't find an admin node for your cluster!")
+        return self._admin
 
     def admin_is_up(self):
         return self.is_running(self.admin_instance)
@@ -185,24 +199,6 @@ class EC2Controller(object):
         if not hasattr(self, '_zadara'):
             # disable zadara control for now
             self._zadara = None
-
-            # if settings.AWS_PROD_PREFIX in self.prefix:
-            #     vpsa_id = settings.ZADARA_VPSA_PROD_ID
-            #     log.debug("{0} matches Zadara vpsa ID of {1}".format(self.prefix, vpsa_id))
-            # elif settings.AWS_STG_PREFIX in self.prefix:
-            #     vpsa_id = settings.ZADARA_VPSA_STG_ID
-            #     log.debug("{0} matches Zadara vpsa ID of {1}".format(self.prefix, vpsa_id))
-            # elif settings.AWS_DEV_PREFIX in self.prefix:
-            #     vpsa_id = settings.ZADARA_VPSA_DEV_ID
-            #     log.debug("{0} matches Zadara vpsa ID of {1}".format(self.prefix, vpsa_id))
-            # else:
-            #     vpsa_id = None
-            #     log.debug("No matchting Zadara vpsa ID for {}".format(self.prefix))
-            #
-            # if vpsa_id is None:
-            #     self._zadara = None
-            # else:
-            #     self._zadara = ZadaraController(vpsa_id)
 
         return self._zadara
 
@@ -318,10 +314,7 @@ class EC2Controller(object):
         else:
             self.refresh_instances()
 
-    def wait_for_state(self, state_cb, instances,
-                       retries=settings.DEFAULT_RETRIES,
-                       sleep_for=settings.DEFAULT_WAIT,
-                       success_msg=None):
+    def wait_for_state(self, state_cb, instances, success_msg=None):
 
         if self.dry_run:
             log.info("Dry-run enabled. Not waiting.")
@@ -330,13 +323,14 @@ class EC2Controller(object):
         if success_msg is None:
             success_msg = "Instances now in desired state"
 
+        retries = settings.EC2M_WAIT_RETRIES
         while retries > 0:
             if state_cb(instances):
                 log.debug(success_msg)
                 return
             retries -= 1
             log.debug("Waiting for desired state... (retries remaining: %d)", retries)
-            time.sleep(settings.DEFAULT_WAIT)
+            time.sleep(settings.EC2M_WAIT_TIME)
 
         if self.force:
             log.warning("Retries exceeded but 'force' enabled. Proceeding anyway.")
@@ -347,7 +341,7 @@ class EC2Controller(object):
         log.info("Bringing up cluster")
 
         if num_workers is None:
-            num_workers = settings.MIN_WORKERS
+            num_workers = settings.EC2M_MIN_WORKERS
 
         # check that we have enough workers available
         log.debug("Workers requested: %d; available: %d", num_workers, len(self.workers))
@@ -367,18 +361,18 @@ class EC2Controller(object):
                 )
             )
 
-        # not less than MIN_WORKERS setting
-        if num_workers < settings.MIN_WORKERS:
-            log.warning("Workers requested %d is less than MIN_WORKERS %d",
-                        num_workers, settings.MIN_WORKERS)
+        # not less than EC2M_MIN_WORKERS setting
+        if num_workers < settings.EC2M_MIN_WORKERS:
+            log.warning("Workers requested %d is less than min workers %d",
+                        num_workers, settings.EC2M_MIN_WORKERS)
             if not self.force:
                 raise ClusterException("Aborting. Cluster must be started with "
-                                       "at least {} workers".format(settings.MIN_WORKERS))
+                                       "at least {} workers".format(settings.EC2M_MIN_WORKERS))
 
-        # and not more than our MAX_WORKERS setting
-        if num_workers > settings.MAX_WORKERS:
-            log.warning("%d workers exceeds MAX_WORKERS setting of %d",
-                        num_workers, settings.MAX_WORKERS)
+        # and not more than our EC2M_MAX_WORKERS setting
+        if num_workers > settings.EC2M_MAX_WORKERS:
+            log.warning("%d workers exceeds max workers setting of %d",
+                        num_workers, settings.EC2M_MAX_WORKERS)
             if not self.force:
                 raise ClusterException("Aborting. Not allowed to start that many workers.")
 
@@ -487,13 +481,9 @@ class EC2Controller(object):
 
         self.zadara.stop()
 
-    def autoscale_disabled(self):
-        return "autoscale" in self.admin_instance.tags \
-            and self.admin_instance.tags["autoscale"].lower() == "off"
-
     def autoscale(self):
 
-        if self.autoscale_disabled():
+        if self.autoscale_off:
             raise ScalingException("Autoscaling disabled for this cluster")
 
         with self.in_maintenance(self.workers):
@@ -505,13 +495,13 @@ class EC2Controller(object):
                       queued_jobs,
                       settings.MAJOR_LOAD_OPERATION_TYPES
                       )
-            if queued_jobs > settings.MAX_QUEUED_JOBS:
+            if queued_jobs > settings.EC2M_MAX_QUEUED_JOBS:
                 log.info("Attempting to scale up.")
                 self.scale_up(num_workers=1)
                 return
 
             log.debug("%d idle workers", len(self.idle_workers))
-            if len(self.idle_workers) > settings.MIN_IDLE_WORKERS:
+            if len(self.idle_workers) > settings.EC2M_MIN_IDLE_WORKERS:
                 log.info("Attempting to scale down.")
                 self.scale_down(num_workers=1, check_uptime=True)
                 return
@@ -548,9 +538,9 @@ class EC2Controller(object):
                 "Cluster does not have {} to start!".format(num_workers))
 
         # are we allowed to scale up by num_workers?
-        if len(running) + num_workers > settings.MAX_WORKERS:
-            error_msg = "Starting {} workers violates MAX_WORKERS setting of {}".format(
-                num_workers, settings.MAX_WORKERS
+        if len(running) + num_workers > settings.EC2M_MAX_WORKERS:
+            error_msg = "Starting {} workers violates max workers setting of {}".format(
+                num_workers, settings.EC2M_MAX_WORKERS
             )
             if self.force:
                 log.warning(error_msg)
@@ -573,9 +563,9 @@ class EC2Controller(object):
                     num_workers
                 ))
 
-        if len(running) - num_workers < settings.MIN_WORKERS:
-            error_msg = "Stopping {} workers violates MIN_WORKERS setting of {}".format(
-                num_workers, settings.MIN_WORKERS
+        if len(running) - num_workers < settings.EC2M_MIN_WORKERS:
+            error_msg = "Stopping {} workers violates min workers setting of {}".format(
+                num_workers, settings.EC2M_MIN_WORKERS
             )
             if self.force:
                 log.warning(error_msg)
@@ -606,7 +596,7 @@ class EC2Controller(object):
             for inst, minutes in stop_candidates:
                 log.debug("Instance %s has used %d minutes of it's billing hour",
                           inst.id, minutes)
-                if minutes < settings.IDLE_INSTANCE_UPTIME_THRESHOLD:
+                if minutes < settings.EC2M_IDLE_UPTIME_THRESHOLD:
                     if self.force:
                         log.warning("Stopping %s anyway because --force", inst.id)
                     else:

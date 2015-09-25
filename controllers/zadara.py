@@ -18,7 +18,7 @@ class ZadaraController():
         self.dry_run = dry_run
         self.security_token = security_token
         if self.security_token is None:
-            self.security_token = settings.ZADARA_ACCOUNT_TOKEN
+            self.security_token = settings.ZADARA_TOKEN
 
     def __zadara_request__(self, endpoint, isPost=False):
         if isPost:

@@ -149,14 +149,16 @@ Intended for time-based scaling where you want to scale up/down to a specific nu
       --help  Show this message and exit.
 
 
-### Settings & the .env file
+### `settings.py`, the `.env` file, and ec2 tags
 
-The program reads several configuration settings from the 
-`settings.py` file, which in turn pulls any sensitive (secret) values
-from environment variables. The easiest way to get those 
-variables into the environment is via a `.env` file. 
+The program reads configuration settings from the `settings.py` file, which has 
+"sensible defaults" for all but the secret stuff. The values for many of the 
+settings can be loaded and/or overridden by environment variables. For sensitive
+info like passwords the value should be set in a local `.env` file. Copy the 
+provided `.env.dist` file to `.env` and edit.
 
-Copy the provided `.env.dist` file to `.env` and edit.
+Any `settings.py` values not listed here really shouldn't need to change much, 
+if at all.
 
 #### Required
 
@@ -167,18 +169,19 @@ Copy the provided `.env.dist` file to `.env` and edit.
 
 #### Optional
 
-* `LOGGLY_TOKEN` - send log events to loggly
-* `ZADARA_ACCOUNT_TOKEN` - for controlling an associated Zadara array
+* `LOGGLY_TOKEN` - send log events to loggly 
+* `ZADARA_TOKEN` - for controlling an associated Zadara array 
+* `ZADARA_VPSA_ID` - id of the Zadara VPSA
 
 #### Other settings of note
 
-* `DEFAULT_RETRIES` - how many times the program should loop waiting for a desired state
-* `DEFAULT_WAIT` - how long to sleep between retries
-* `MIN_WORKERS` - minimum number of worker nodes to employ
-* `MAX_WORKERS` - maximum number of worker nodes to employ
-* `MIN_IDLE_WORKERS` - minimum number of idle workers to maintain
-* `MAX_QUEUED_JOBS` - maximum number of queued jobs to allow for auto-scaling calculations
-* `MAJOR_LOAD_OPERATION_TYPES` - the types ("id" values) of workflow operations whose jobs we want to consider when calculating autoscaling
+* `EC2M_WAIT_RETRIES` - how many times the program should loop waiting for a desired state change 
+* `EC2M_WAIT_TIME` - how long to sleep between retries 
+* `EC2M_MIN_WORKERS` - minimum number of worker nodes to employ 
+* `EC2M_MAX_WORKERS` - maximum number of worker nodes to employ 
+* `EC2M_MIN_IDLE_WORKERS` - minimum number of idle workers to maintain 
+* `EC2M_IDLE_UPTIME_THRESHOLD` - how long a worker instance needs to be "up" before it should be a candidate for automated down-scaling 
+* `EC2M_MAX_QUEUED_JOBS` - maximum number of queued jobs to allow for auto-scaling calculations 
 
 ### The --force option
 
@@ -186,8 +189,8 @@ The `--force` option is currently only applicable to the `stop`
 and `scale` commands. It has two effects:
 
 1. In the case of the `scale` command, the following settings 
-will be ignored: `MIN_WORKERS`, `MAX_WORKERS`, 
-`MIN_IDLE_WORKERS`. 
+will be ignored: `EC2M_MIN_WORKERS`, `EC2M_MAX_WORKERS`, 
+`EC2M_MIN_IDLE_WORKERS`. 
 
 2. For both `stop` and `scale`, it prevents the process from 
 halting execution after giving up waiting for something 
@@ -217,7 +220,7 @@ to be run as a cron job with a frequency of 2-5 minutes.
 #### Disabling
 
 The autoscale command checks for the presence of an 
-ec2 instance tag, `autoscale`. If present with a value of "off" the autoscale 
+ec2 instance tag, `ec2m:autoscale_off`. If present (with any value) the autoscale 
 command will exit without performing any actions.
 
 #### Billing considerations
@@ -229,7 +232,7 @@ once the `autoscale` process has identified idle workers, it then looks at how
 long the instances have been "up" and rejects those whose uptime calculations 
 indicate the instance has not used the bulk of it's billed hour. The threshold 
 of what constitutes "the bulk of it's billed hour" is defined by 
-`settings.IDLE_INSTANCE_UPTIME_THRESHOLD` (currently 50 mintues). For example, 
+`settings.EC2M_IDLE_UPTIME_THRESHOLD` (currently 50 mintues). For example, 
 if an instance is seen to have only been up for 40 minutes (or 1:40, 3:33, etc.) 
 it will not be shut down even if idle. If it has been up for 53 minutes (or 1:53, 
 5:53, etc.) it will be shut down.
