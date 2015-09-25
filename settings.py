@@ -1,11 +1,14 @@
 
-import dotenv
 from unipath import Path
 from os import getenv as env
 
+import warnings
+warnings.filterwarnings('ignore', module='dotenv')
+
+import dotenv
 dotenv.load_dotenv(Path(__file__).parent.child('.env'))
 
-VERSION = '2.1.0'
+VERSION = '2.2.0'
 
 # Matterhorn credentials and http bits
 MATTERHORN_HEADERS     = { 'X-REQUESTED-AUTH' : 'Digest', 'X-Opencast-Matterhorn-Authorization' : 'true' }
@@ -19,14 +22,14 @@ MH_SUFFIXES = ["-admin", "-worker", "-engage"]
 MAJOR_LOAD_OPERATION_TYPES = ["compose", "editor", "inspect", "video-segment"]
 
 # scaling settings
-EC2M_MAX_WORKERS = env('EC2M_MAX_WORKERS', 10)
-EC2M_MIN_WORKERS = env('EC2M_MIN_WORKERS', 2)
-EC2M_MAX_QUEUED_JOBS = env('EC2M_MAX_QUEUED_JOBS', 0)
-EC2M_MIN_IDLE_WORKERS = env('EC2M_MIN_IDLE_WORKERS', 0)
-EC2M_IDLE_UPTIME_THRESHOLD = env('EC2M_IDLE_UPTIME_THRESHOLD', 55) # this should be tweaked based on frequency of any autoscale cron jobs
+EC2M_MAX_WORKERS = int(env('EC2M_MAX_WORKERS', 10))
+EC2M_MIN_WORKERS = int(env('EC2M_MIN_WORKERS', 2))
+EC2M_MAX_QUEUED_JOBS = int(env('EC2M_MAX_QUEUED_JOBS', 0))
+EC2M_MIN_IDLE_WORKERS = int(env('EC2M_MIN_IDLE_WORKERS', 0))
+EC2M_IDLE_UPTIME_THRESHOLD = int(env('EC2M_IDLE_UPTIME_THRESHOLD', 55)) # this should be tweaked based on frequency of any autoscale cron jobs
 
-EC2M_WAIT_RETRIES = env('EC2M_WAIT_RETRIES', 10)
-EC2M_WAIT_TIME = env('EC2M_WAIT_TIME', 10)
+EC2M_WAIT_RETRIES = int(env('EC2M_WAIT_RETRIES', 10))
+EC2M_WAIT_TIME = int(env('EC2M_WAIT_TIME', 10))
 
 #AWS bits
 AWS_REGION = env('AWS_REGION', 'us-east-1')

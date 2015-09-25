@@ -42,21 +42,46 @@ class MatterhornControllerTests(unittest.TestCase):
             { "base_url": "http://1.1.1.1" },
             { "base_url": "http://2.2.2.2" },
             { "base_url": "https://baz" },
-            { "base_url": "https://fizzbuzz" }
+            { "base_url": "https://fizzbuzz" },
+            { "base_url": "http://blergh-private"}
         ]
         mh.client.hosts = Mock(return_value=[ServiceHost(x, mh.client) for x in fake_hosts])
         fake_instances = [
-            Mock(private_ip_address='1.1.1.1', public_dns_name="foo", id=1),
-            Mock(private_ip_address='2.2.2.2', public_dns_name="bar", id=2),
-            Mock(private_ip_address='3.3.3.3', public_dns_name="baz", id=3),
-            Mock(private_ip_address='4.4.4.4', public_dns_name="frobozz", id=4),
+            Mock(id=1,
+                 private_ip_address='1.1.1.1',
+                 public_dns_name="foo",
+                 private_dns_name="foo-private"
+                 ),
+            Mock(id=2,
+                 private_ip_address='2.2.2.2',
+                 public_dns_name="bar",
+                 private_dns_name="bar-private"
+                 ),
+            Mock(id=3,
+                 private_ip_address='3.3.3.3',
+                 public_dns_name="baz",
+                 private_dns_name="baz-private"
+                 ),
+            # this one won't explicitly match a host entry so the mapping
+            # will be (hackishly) assumed
+            Mock(id=4,
+                 private_ip_address='4.4.4.4',
+                 public_dns_name="frobozz",
+                 private_dns_name="frobozz-private"
+                 ),
+            Mock(id=5,
+                 private_ip_address='5.5.5.5',
+                 public_dns_name="blergh",
+                 private_dns_name="blergh-private"
+                 ),
         ]
         mh.create_instance_host_map(fake_instances)
         expected = {
             1: "http://1.1.1.1",
             2: "http://2.2.2.2",
             3: "https://baz",
-            4: "https://fizzbuzz"
+            4: "https://fizzbuzz",
+            5: "http://blergh-private"
         }
         self.assertEqual(mh.instance_host_map, expected)
 

@@ -41,6 +41,7 @@ workers, and the overall maintenance state of the Matterhorn instances.
 * *-d/--debug* - adds more detailed logging output
 * *-n/--dry_run* - the script will go through the motions but not actually change anything
 * *-f/--force* - ignore some settings and wait timeouts (see more below)
+* *-o/--opsworks* - indicates an Opsworks cluster
 
 All commands are actually subcommands of the main `ec2_manager.py` program,
 and many take their own arguments and options. The structure
@@ -63,6 +64,8 @@ and opinionated about how to build multi-level command interfaces.)
 
 ### Subcommands
 
+A `*` indicates a subcommand that is not supported for Opsworks clusters.
+
 #### status
 
 Get a json dump of the cluster's status summary. Note that the 
@@ -76,7 +79,7 @@ Get a json dump of the cluster's status summary. Note that the
       -f, --format [json|table]
       --help                     Show this message and exit.
 
-#### start
+#### start `*`
 
 Starts a cluster, including any associated Zadara arrays. 
 Allows starting with a specified number of workers (default = 4).
@@ -89,7 +92,7 @@ Allows starting with a specified number of workers (default = 4).
       -w, --workers INTEGER
       --help  
       
-#### stop
+#### stop `*`
 
 Stop a cluster, including any associated Zadara arrays.
 
@@ -263,8 +266,10 @@ number of instances, workers, workers online, etc.
 
 ### Cluster naming conventions / assumptions
 
-The following assumptions are made about how ec2 instances 
-are named. 
+#### standard ec2 clusters
+
+The following assumptions are made about how instances 
+are named/tagged in standard ec2 MH clusters. 
 
 * The instance name value will be stored in the tag 'Name'
 * The instance names will all be prefixed with the name of the cluster.
@@ -275,7 +280,18 @@ e.g., all instance names in the `prdAWS` cluster will begin with `prdAWS-`
 * DB nodes will be named `[prefix]-db`
 * NFS nodes will be named `[prefix]-nfs`
 
-These assumptions hold only for the standard ec2
-Matterhorn clusters; opsworks clusters will use a different
-naming scheme and controlling them will be implemented in a 
-future release.
+#### opsworks clusters
+
+Opsworks cluster naming/tagging assumptions are slightly different.
+In addition, since the ec2-manager should not be used for doing a 
+full start/stop for opsworks clusters, "support" nodes (db, storage)
+are not manipulated.
+
+* The instance name value will be stored in the tag 'Name'
+* Instances are associated with a particular cluster via the
+`opsworks:stack` tag. e.g., all instances in the `foobar` 
+ cluster will be tagged `opsworks:stack=foobar`
+* A cluster will have one admin instance named with the tag `opsworks:layer:admin`
+* Worker nodes will have the tag `opsworks:layer:workers`
+* Engage nodes will have the tag `opsworks:layer:engage`
+

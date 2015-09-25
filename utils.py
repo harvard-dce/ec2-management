@@ -1,6 +1,7 @@
 from functools import wraps
 import sys
 import json
+import click
 import urllib
 import urllib2
 import logging
@@ -136,4 +137,14 @@ def billed_minutes(inst):
         raise RuntimeError("Launch time from the future?!?")
     uptime_minutes = (now - launch_time).seconds / 60
     return uptime_minutes % 60
+
+def opsworks_verboten(cmd):
+    @wraps(cmd)
+    def wrapped(ec2, *args, **kwargs):
+        ctx = click.get_current_context()
+        if 'opsworks' in ctx.meta:
+            raise NotImplementedError(
+                "This command is not implemented for Opsworks clusters"
+            )
+    return wrapped
 

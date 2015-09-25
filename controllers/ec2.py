@@ -42,6 +42,10 @@ def log_before_after_stats(cmd):
         return result
     return wrapped
 
+class EC2Instance(ObjectProxy):
+    pass
+
+
 class EC2Controller(object):
 
     def __init__(self, cluster_prefix, region=None, dry_run=False, force=False,
@@ -85,17 +89,16 @@ class EC2Controller(object):
     @property
     def instances(self):
         if not hasattr(self, '_instances'):
-            # our internal list of instance objs are proxies of the actual
-            # objects. this allows us to use and pass around lists and sublists
-            # of our instances and have changes propogate everywhere
-            # during a refresh
-            self._instances = map(ObjectProxy, self.get_instances())
+            self._instances = map(EC2Instance, self.get_instances())
         return self._instances
 
+    @property
+    def instance_filter(self):
+        return { 'tag:Name': self.prefix + '-*' }
+
     def get_instances(self):
-        filters = {'tag:Name': self.prefix + '-*'}
-        log.debug("Fetching instances using filter: %s", str(filters))
-        instances = self.connection.get_only_instances(filters=filters)
+        log.debug("Fetching instances using filter: %s", str(self.instance_filter))
+        instances = self.connection.get_only_instances(filters=self.instance_filter)
 
         for inst in instances:
             log.debug("Found: %s, %s, %s, %s, %s, monitor %s",
@@ -110,14 +113,8 @@ class EC2Controller(object):
 
     def refresh_instances(self):
         log.debug("Refreshing instances list")
-        fresh_instances = self.get_instances()
-
-        if len(fresh_instances) != len(self._instances):
-            raise RuntimeError("Whoa! Somehow the number of instances changed.")
-
-        # replace the instance obj that our proxies are wrapping
-        for idx, inst in enumerate(self._instances):
-            inst.__wrapped__ = fresh_instances[idx]
+        for inst in self._instances:
+            inst.update()
 
     def instance_tag(self, tag, default=None):
         if tag in self.admin_instance.tags:
@@ -133,9 +130,6 @@ class EC2Controller(object):
 
     def is_admin(self, instance):
         return instance.tags['Name'].endswith('admin')
-
-    def is_engage(self, instance):
-        return instance.tags['Name'].endswith('engage')
 
     def is_worker(self, instance):
         return instance.tags['Name'].endswith('worker')
@@ -254,18 +248,24 @@ class EC2Controller(object):
             log.debug("Starting: {0}, {1}, {2}, {3}, {4}".format(
                 instance.tags['Name'], instance.id,  instance.state,
                 instance.ip_address, instance.private_ip_address))
-            instance.start(dry_run=self.dry_run)
+            self._start_instance(instance)
         except EC2ResponseError, e:
             log.error("Error starting instance: %s", e.errors)
+
+    def _start_instance(self, instance):
+        instance.start(dry_run=self.dry_run)
 
     def stop_instance(self, instance):
         try:
             log.debug("Stopping: {0}, {1}, {2}, {3}, {4}".format(
                 instance.tags['Name'], instance.id,  instance.state,
                 instance.ip_address, instance.private_ip_address))
-            instance.stop(dry_run=self.dry_run)
+            self._stop_instance(instance)
         except EC2ResponseError, e:
             log.error("Error stopping instance: %s", e.errors)
+
+    def _stop_instance(self, instance):
+        instance.stop(dry_run=self.dry_run)
 
     def start_support_instances(self, wait=True):
         self.start_instances(self.support_instances, wait)
