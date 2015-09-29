@@ -27,12 +27,11 @@ class OpsworksController(EC2Controller):
         return self._opsworks
 
     def create_opsworks_conn(self):
-        conn = boto.opsworks.connect_to_region(self.region,
-            aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_secret_access_key
-            )
+
+        conn = boto.opsworks.connect_to_region(self.region, **self.aws_connect_params)
+
         try:
-            conn.describe_my_user_profile()
+            conn.describe_stacks()
             log.debug("boto.opsworks connection to region %s established", self.region)
             return conn
         except JSONResponseError, e:

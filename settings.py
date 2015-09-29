@@ -8,7 +8,7 @@ warnings.filterwarnings('ignore', module='dotenv')
 import dotenv
 dotenv.load_dotenv(Path(__file__).parent.child('.env'))
 
-VERSION = '2.2.0'
+VERSION = '2.3.0'
 
 # Matterhorn credentials and http bits
 MATTERHORN_HEADERS     = { 'X-REQUESTED-AUTH' : 'Digest', 'X-Opencast-Matterhorn-Authorization' : 'true' }
@@ -35,6 +35,7 @@ EC2M_WAIT_TIME = int(env('EC2M_WAIT_TIME', 10))
 AWS_REGION = env('AWS_REGION', 'us-east-1')
 AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY')
+AWS_PROFILE = env('AWS_PROFILE')
 
 ZADARA_TOKEN = env('ZADARA_TOKEN')
 ZADARA_VPSA_ID = env('ZADARA_VPSA_ID')

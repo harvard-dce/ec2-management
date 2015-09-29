@@ -29,14 +29,16 @@ class EC2ControllerTests(unittest.TestCase):
         self.assertEqual(ec2.prefix, 'dev99')
 
     @patch.object(boto.ec2.EC2Connection, 'describe_account_attributes')
-    def test_connection_init(self, mock_daa):
+    @patch('controllers.ec2.settings', autospec=True)
+    def test_connection_init(self, mock_settings, mock_daa):
+
+        mock_settings.AWS_ACCESS_KEY_ID = 'bar'
+        mock_settings.AWS_SECRET_ACCESS_KEY = 'baz'
+        mock_settings.AWS_REGION = 'us-west-1'
 
         ec2 = EC2Controller('dev99')
         self.assertIsInstance(ec2.connection, boto.ec2.EC2Connection)
 
-        ec2 = EC2Controller('dev99', region='us-west-1',
-                            aws_access_key_id='bar',
-                            aws_secret_access_key='baz')
         self.assertEqual(ec2.connection.aws_access_key_id, 'bar')
         self.assertEqual(ec2.connection.aws_secret_access_key,'baz')
         self.assertEqual(ec2.connection.region.name, 'us-west-1')

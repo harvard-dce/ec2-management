@@ -48,20 +48,16 @@ class EC2Instance(ObjectProxy):
 
 class EC2Controller(object):
 
-    def __init__(self, cluster_prefix, region=None, dry_run=False, force=False,
-                 aws_access_key_id=None, aws_secret_access_key=None):
+    def __init__(self, cluster_prefix, dry_run=False, force=False):
 
         self.prefix = cluster_prefix
         self.dry_run = dry_run
         self.force = force
-        self.region = region or settings.AWS_REGION
+        self.region = settings.AWS_REGION
 
-        self.aws_access_key_id = aws_access_key_id
-        if self.aws_access_key_id is None:
-            self.aws_access_key_id = settings.AWS_ACCESS_KEY_ID
-        self.aws_secret_access_key = aws_secret_access_key
-        if self.aws_secret_access_key is None:
-            self.aws_secret_access_key = settings.AWS_SECRET_ACCESS_KEY
+        self.aws_access_key_id = settings.AWS_ACCESS_KEY_ID
+        self.aws_secret_access_key = settings.AWS_SECRET_ACCESS_KEY
+        self.aws_profile = settings.AWS_PROFILE
 
     @property
     def connection(self):
@@ -69,11 +65,23 @@ class EC2Controller(object):
             self._connection = self.create_connection()
         return self._connection
 
+    @property
+    def aws_connect_params(self):
+
+        if self.aws_access_key_id is not None:
+            return {
+                'aws_access_key_id': self.aws_access_key_id,
+                'aws_secret_access_key': self.aws_secret_access_key
+            }
+        elif self.aws_profile is not None:
+            return {'profile_name': self.aws_profile}
+        else:
+            return {}
+
     def create_connection(self):
-        conn = boto.ec2.connect_to_region(self.region,
-            aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_secret_access_key
-            )
+
+        conn = boto.ec2.connect_to_region(self.region, **self.aws_connect_params)
+
         try:
             conn.describe_account_attributes()
             log.debug("boto.ec2 connection to region %s established", self.region)

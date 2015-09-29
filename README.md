@@ -167,8 +167,17 @@ if at all.
 
 * `MATTERHORN_ADMIN_SERVER_USER`
 * `MATTERHORN_ADMIN_SERVER_PASS`
+
+#### AWS credentials
+
 * `AWS_ACCESS_KEY_ID`
 * `AWS_SECRET_ACCESS_KEY`
+
+or
+
+* `AWS_PROFILE` - to identify a specific credentials profile. The `boto` library will look in `~/.aws/credentials`.
+
+In the absence of these settings **and** the absence of a `~/.aws/credentials` profile, the use of AWS Instance Profile auth is assumed.
 
 #### Optional
 
