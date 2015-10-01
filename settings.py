@@ -8,7 +8,7 @@ warnings.filterwarnings('ignore', module='dotenv')
 import dotenv
 dotenv.load_dotenv(Path(__file__).parent.child('.env'))
 
-VERSION = '2.3.0'
+VERSION = '2.3.1'
 
 # Matterhorn credentials and http bits
 MATTERHORN_HEADERS     = { 'X-REQUESTED-AUTH' : 'Digest', 'X-Opencast-Matterhorn-Authorization' : 'true' }
