@@ -5,6 +5,8 @@ import pyhorn
 pyhorn.client._session._is_cache_disabled = True
 
 import logging
+from requests.exceptions import Timeout as RequestsTimeout
+
 import settings
 from exceptions import *
 
@@ -110,9 +112,14 @@ class MatterhornController():
         return len(queued_jobs)
 
     def is_idle(self, inst):
-        stats = self.client.statistics()
         host_url = self.instance_host_map[inst.id]
         log.debug("Checking idleness state of %s, %s", inst.id, host_url)
+        try:
+            stats = self.client.statistics()
+        except RequestsTimeout, e:
+            log.warning("Idleness state check for %s failed: %s, %s",
+                        inst.id, type(e), str(e))
+            return False
         running_jobs = stats.running_jobs(host=host_url)
         log.debug("%s has %d running jobs", host_url, running_jobs)
         return running_jobs == 0

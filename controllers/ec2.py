@@ -7,7 +7,7 @@ from wrapt import ObjectProxy
 from operator import itemgetter
 from contextlib import contextmanager
 from functools import wraps
-from requests.exceptions import ConnectTimeout
+from requests.exceptions import Timeout as RequestsTimeout
 
 import boto.ec2.networkinterface
 from boto.exception import EC2ResponseError
@@ -226,7 +226,7 @@ class EC2Controller(object):
             log.debug("Trying to fetch stats from Matterhorn")
             stats = self.mh.service_stats()
             mh_is_up = True
-        except (ConnectTimeout,MatterhornCommunicationException), e:
+        except (RequestsTimeout, MatterhornCommunicationException), e:
             log.debug("Error communicating with Matterhorn: %s", str(e))
             mh_is_up = False
 
@@ -648,7 +648,7 @@ class EC2Controller(object):
                           ','.join(x.tags['Name'] for x in for_maintenance))
                 yield # let calling code do it's thing
             except Exception, e:
-                log.error("Caught unchecked exception: %s", str(e))
+                log.debug("Exception caught during 'in_maintenance' context: %s, %s", type(e), str(e))
                 raise
             finally:
                 if restore_state:
