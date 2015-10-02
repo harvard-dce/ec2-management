@@ -273,8 +273,9 @@ class EC2ControllerTests(unittest.TestCase):
     @patch.object(EC2Controller, 'idle_workers', new_callable=PropertyMock)
     @patch.object(EC2Controller, 'stop_instances')
     @patch('controllers.ec2.utils.billed_minutes')
+    @patch('controllers.ec2.utils.total_uptime')
     @patch('controllers.ec2.settings', autospec=True)
-    def test_scale_down_billing_check(self, mock_settings, mock_minutes, mock_stop, mock_idle):
+    def test_scale_down_billing_check(self, mock_settings, mock_uptime, mock_minutes, mock_stop, mock_idle):
         ec2 = EC2Controller('dev99')
         workers = [
             Mock(id=1, tags={'Name': 'dev99-worker'},
@@ -307,17 +308,22 @@ class EC2ControllerTests(unittest.TestCase):
         self.assertEqual(len(args[0]), 1)
         self.assertEqual(args[0][0].id, 2)
 
+        mock_uptime.reset_mock()
+        mock_uptime.side_effect = [100, 300, 200]
         mock_minutes.reset_mock()
-        mock_minutes.side_effect = [18, 52, 55]
-        # should get the one with the most billed minutes
+        # note: these values get used in the order of instances sorted by uptime
+        mock_minutes.side_effect = [52, 18, 55]
+        # should get the one with the most uptime
         ec2.scale_down(1, check_uptime=True)
         args, kwargs = mock_stop.call_args
         # stop_instances should have been called with the 3rd mock instance
         self.assertEqual(len(args[0]), 1)
-        self.assertEqual(args[0][0].id, 3)
+        self.assertEqual(args[0][0].id, 2)
 
+        mock_uptime.reset_mock()
+        mock_uptime.side_effect = [100, 200, 300]
         mock_minutes.reset_mock()
-        mock_minutes.side_effect = [18, 52, 55]
+        mock_minutes.side_effect = [52, 55, 18]
         # should get the one with the most billed minutes
         ec2.scale_down(2, check_uptime=True)
         args, kwargs = mock_stop.call_args

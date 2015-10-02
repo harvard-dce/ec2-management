@@ -601,16 +601,19 @@ class EC2Controller(object):
             else:
                 raise ScalingException(error_msg)
 
+        # helps ensure we're stopping the longest-running, and also that we'll
+        # stop the same instance again if (for some reason) an earlier stop
+        # action got wedged
+        stop_candidates = sorted(stop_candidates, key=utils.total_uptime, reverse=True)
+
         if not check_uptime:
             instances_to_stop = stop_candidates[:num_workers]
         else:
             # only stop idle workers if they're approaching an uptime near to being
             # divisible by 60m since we're paying for the full hour anyway
             instances_to_stop = []
-            stop_candidates = dict((x, utils.billed_minutes(x)) for x in stop_candidates)
-            # sort so we get the longest-up first
-            stop_candidates = sorted(stop_candidates.iteritems(), key=itemgetter(1), reverse=True)
-            for inst, minutes in stop_candidates:
+            for inst in stop_candidates:
+                minutes = utils.billed_minutes(inst)
                 log.debug("Instance %s has used %d minutes of it's billing hour",
                           inst.id, minutes)
                 if minutes < settings.EC2M_IDLE_UPTIME_THRESHOLD:

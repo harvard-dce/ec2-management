@@ -130,13 +130,15 @@ def format_status(stats, format):
     elif format == 'table':
         raise NotImplementedError('Ooops! Not implemented yet!')
 
-def billed_minutes(inst):
+def total_uptime(inst):
     launch_time = arrow.get(inst.launch_time)
     now = arrow.utcnow()
     if launch_time > now:
         raise RuntimeError("Launch time from the future?!?")
-    uptime_minutes = (now - launch_time).seconds / 60
-    return uptime_minutes % 60
+    return (now - launch_time).seconds
+
+def billed_minutes(inst):
+    return (total_uptime(inst) / 60) % 60
 
 def opsworks_verboten(cmd):
     @wraps(cmd)
