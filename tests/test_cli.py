@@ -80,14 +80,12 @@ class CliTests(unittest.TestCase):
         mock_init_logging.assert_called_with('dev99', False, logging.INFO)
 
     @patch.object(utils, 'log_status_summary', autospec=True)
-    def test_before_after_logging(self, mock_log_status, mock_controller, mock_init_logging):
+    @patch.object(utils, 'log_action_summary', autospec=True)
+    def test_before_after_logging(self, mock_log_action, mock_log_status, mock_controller, mock_init_logging):
         # test that before/after stats logging is executed
         result = self.runner.invoke(cli, ['dev99', 'bar'])
-        self.assertEqual(mock_log_status.call_count, 2)
-        call1 = mock_log_status.call_args_list[0][0]
-        self.assertEqual(call1[1], 'Before')
-        call2 = mock_log_status.call_args_list[1][0]
-        self.assertEqual(call2[1], 'After')
+        self.assertEqual(mock_log_status.call_count, 1)
+        self.assertEqual(mock_log_action.call_count, 1)
 
     def test_handle_exit(self, mock_controller, mock_init_logging):
 

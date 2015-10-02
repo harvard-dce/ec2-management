@@ -1,4 +1,5 @@
 from functools import wraps
+import re
 import sys
 import json
 import click
@@ -96,19 +97,18 @@ def init_logging(cluster, verbose, stdout_level=logging.INFO):
     log.debug("logging to %s", log_path)
 
     if hasattr(settings, 'LOGGLY_TOKEN'):
+        cluster_tag = re.sub('\s+', '_', cluster)
         loggly_handler = LogglyHandler(
             settings.LOGGLY_TOKEN,
             settings.LOGGLY_URL,
-            tags=cluster + ',' + settings.LOGGLY_TAGS
+            tags=cluster_tag + ',' + settings.LOGGLY_TAGS
         )
         log.addHandler(loggly_handler)
         log.debug("Logging to loggly")
 
-def log_status_summary(stats, msg_prefix=None):
+def log_status_summary(stats):
 
-    msg = 'status summary: '
-    if msg_prefix is not None:
-        msg = msg_prefix + ' ' + msg
+    msg = 'Cluster status summary: '
 
     msg += "instances: {}, instances online: {}, workers: {}, workers online: {}".format(
         len(stats['instances']),
@@ -123,6 +123,13 @@ def log_status_summary(stats, msg_prefix=None):
             stats['running_jobs'])
 
     log.info(msg, extra=stats)
+
+def log_action_summary(actions):
+
+    msg = 'Action summary: '
+    msg += 'stopped {} instances: {}'.format(actions['stopped'], actions['stopped_ids'])
+    msg += '; started {} instances: {}'.format(actions['started'], actions['started_ids'])
+    log.info(msg, extra=actions)
 
 def format_status(stats, format):
     if format == 'json':
@@ -139,6 +146,8 @@ def total_uptime(inst):
 
 def billed_minutes(inst):
     return (total_uptime(inst) / 60) % 60
+
+
 
 def opsworks_verboten(cmd):
     @wraps(cmd)

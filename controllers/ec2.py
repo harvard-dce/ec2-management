@@ -36,9 +36,9 @@ def admin_is_up(cmd):
 def log_before_after_stats(cmd):
     @wraps(cmd)
     def wrapped(ec2, *args, **kwargs):
-        utils.log_status_summary(ec2.status_summary(), 'Before')
+        utils.log_status_summary(ec2.status_summary())
         result = cmd(ec2, *args, **kwargs)
-        utils.log_status_summary(ec2.status_summary(), 'After')
+        utils.log_action_summary(ec2.action_summary())
         return result
     return wrapped
 
@@ -251,6 +251,17 @@ class EC2Controller(object):
                 inst_summary['maintenance'] = self.mh.is_in_maintenance(inst)
             summary['instances'].append(inst_summary)
 
+        return summary
+
+    def action_summary(self):
+        stopped = [x['instance'] for x in self.instance_actions if x['action'] == 'stopped']
+        started = [x['instance'] for x in self.instance_actions if x['action'] == 'started']
+        summary = {
+            'stopped': len(stopped),
+            'stopped_ids': ', '.join(x.id for x in stopped),
+            'started': len(started),
+            'started_ids': ', '.join(x.id for x in started)
+        }
         return summary
 
     def add_instance_action(self, instance, action):
