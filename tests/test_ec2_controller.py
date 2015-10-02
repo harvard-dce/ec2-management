@@ -363,8 +363,8 @@ class EC2ControllerTests(unittest.TestCase):
     def test_instance_actions(self):
 
         ec2 = EC2Controller('dev99')
-        inst = Mock()
-        ec2._stop_instance(inst)
+        inst = Mock(tags={'Name': 'foo'})
+        ec2.stop_instance(inst)
         self.assertEqual(ec2.instance_actions[0], {'instance': inst, 'action': 'stopped'})
-        ec2._start_instance(inst)
+        ec2.start_instance(inst)
         self.assertEqual(ec2.instance_actions[1], {'instance': inst, 'action': 'started'})
