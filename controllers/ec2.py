@@ -557,8 +557,7 @@ class EC2Controller(object):
 
         instances_to_start = stopped[:num_workers]
         log.info("Starting %d worker(s)", len(instances_to_start))
-        self.start_instances(instances_to_start)
-        self.maintenance_off(instances_to_start)
+        self.start_instances(instances_to_start, wait=False)
 
     def scale_down(self, num_workers, check_uptime=False):
 
@@ -618,7 +617,7 @@ class EC2Controller(object):
                 raise ScalingException("No workers available to stop")
 
         log.info("Shutting down %d worker(s)", len(instances_to_stop))
-        self.stop_instances(instances_to_stop)
+        self.stop_instances(instances_to_stop, wait=False)
 
     @contextmanager
     def in_maintenance(self, instances=None, restore_state=True):
