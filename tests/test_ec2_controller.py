@@ -326,3 +326,39 @@ class EC2ControllerTests(unittest.TestCase):
         self.assertEqual(args[0][0].id, 3)
         self.assertEqual(args[0][1].id, 2)
 
+    @patch.object(EC2Controller, 'maintenance_on')
+    @patch.object(EC2Controller, 'maintenance_off')
+    def test_in_maintenance(self, mock_maint_off, mock_maint_on):
+
+        ec2 = EC2Controller('dev99')
+        ec2._mh = Mock()
+        ec2._mh.is_in_maintenance.return_value = False
+
+        instances = [
+            Mock(id='a', tags={'Name': 'a'}, state="running"),
+            Mock(id='b', tags={'Name': 'b'}, state="running"),
+            Mock(id='c', tags={'Name': 'c'}, state="running"),
+        ]
+
+        with ec2.in_maintenance(instances):
+            args, kwargs = mock_maint_on.call_args
+            self.assertEqual(args[0], instances)
+            ec2.instance_actions = [
+                {'instance': instances[0], 'action': 'stopped'}
+            ]
+
+            # mark one of the instances as "stopped" to verify it doesn't have
+            # it's maintenance state restored in the finally block of the
+            # context manager
+
+        args, kwargs = mock_maint_off.call_args
+        self.assertEqual(args[0], instances[1:])
+
+    def test_instance_actions(self):
+
+        ec2 = EC2Controller('dev99')
+        inst = Mock()
+        ec2._stop_instance(inst)
+        self.assertEqual(ec2.instance_actions[0], {'instance': inst, 'action': 'stopped'})
+        ec2._start_instance(inst)
+        self.assertEqual(ec2.instance_actions[1], {'instance': inst, 'action': 'started'})

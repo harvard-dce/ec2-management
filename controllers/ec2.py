@@ -59,6 +59,8 @@ class EC2Controller(object):
         self.aws_secret_access_key = settings.AWS_SECRET_ACCESS_KEY
         self.aws_profile = settings.AWS_PROFILE
 
+        self.instance_actions = []
+
     @property
     def connection(self):
         if not hasattr(self, '_connection'):
@@ -251,6 +253,12 @@ class EC2Controller(object):
 
         return summary
 
+    def add_instance_action(self, instance, action):
+        self.instance_actions.append({
+            'instance': instance,
+            'action': action
+        })
+
     def start_instance(self, instance):
         try:
             log.debug("Starting: {0}, {1}, {2}, {3}, {4}".format(
@@ -262,6 +270,7 @@ class EC2Controller(object):
 
     def _start_instance(self, instance):
         instance.start(dry_run=self.dry_run)
+        self.add_instance_action(instance, 'started')
 
     def stop_instance(self, instance):
         try:
@@ -274,6 +283,7 @@ class EC2Controller(object):
 
     def _stop_instance(self, instance):
         instance.stop(dry_run=self.dry_run)
+        self.add_instance_action(instance, 'stopped')
 
     def start_support_instances(self, wait=True):
         self.start_instances(self.support_instances, wait)
@@ -652,6 +662,13 @@ class EC2Controller(object):
                 raise
             finally:
                 if restore_state:
+                    stopped = [x['instance'] for x in self.instance_actions if x['action'] == 'stopped']
+                    for inst in stopped:
+                        if inst in for_maintenance:
+                            log.debug("not toggling maintenance for %s as it was stopped", inst.id)
+                            for_maintenance.remove(inst)
+                    log.debug("restoring maintenance state for: %s",
+                              ','.join([x.id for x in for_maintenance]))
                     self.maintenance_off(for_maintenance)
 
     def maintenance_on(self, instances=None, wait=True):
