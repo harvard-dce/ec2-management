@@ -48,6 +48,14 @@ class CliTests(unittest.TestCase):
                 raise exc_type('Boom!')
         cli.add_command(baz)
 
+        # fake command for testing opsworks verboten
+        @click.command()
+        @click.pass_obj
+        @utils.opsworks_verboten
+        def foobar(ec2):
+            return 'foobar'
+        cli.add_command(foobar)
+
     def tearDown(self):
         for fake_cmd in ['foo','bar','baz']:
             del cli.commands[fake_cmd]
@@ -103,3 +111,12 @@ class CliTests(unittest.TestCase):
         result = self.runner.invoke(cli, ['dev99', 'baz', '--exc_type', 'KeyError'])
         self.assertEqual(result.exit_code, -1)
         self.assertIsInstance(result.exception, KeyError)
+
+    def test_opsworks_verboten(self, mock_controller, mock_init_logging):
+
+        result = self.runner.invoke(cli, ['dev99', 'foobar'])
+        self.assertIsInstance(result.exception, SystemExit)
+        self.assertEqual(str(result.exception), 'foobar')
+
+        result = self.runner.invoke(cli, ['--opsworks', 'dev99', 'foobar'])
+        self.assertIsInstance(result.exception, NotImplementedError)

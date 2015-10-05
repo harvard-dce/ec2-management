@@ -157,5 +157,6 @@ def opsworks_verboten(cmd):
             raise NotImplementedError(
                 "This command is not implemented for Opsworks clusters"
             )
+        return cmd(ec2, *args, **kwargs)
     return wrapped
 
