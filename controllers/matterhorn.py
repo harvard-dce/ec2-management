@@ -126,13 +126,13 @@ class MatterhornController():
         return running_jobs == 0
 
     def get_host_for_instance(self, inst):
-        hosts = self.client.hosts()
-        host_url = self.instance_host_map[inst.id]
+        host_objs = self.client.hosts()
         try:
-            return next(x for x in hosts if x.base_url == host_url)
-        except StopIteration:
+            host_url = self.instance_host_map[inst.id]
+            return next(x for x in host_objs if x.base_url == host_url)
+        except (KeyError, StopIteration):
             raise MatterhornControllerException(
-                "No Matterhorn host found matching {}".format(host_url)
+                "No Matterhorn host mappted to {}".format(inst.id)
             )
 
     def is_in_maintenance(self, inst):

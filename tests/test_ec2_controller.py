@@ -7,7 +7,7 @@ from moto import mock_ec2
 from mock import Mock, patch, PropertyMock
 from controllers.exceptions import ClusterException, ScalingException
 
-from controllers import EC2Controller
+from controllers import EC2Controller, matterhorn
 
 class EC2ControllerTests(unittest.TestCase):
 
@@ -368,3 +368,32 @@ class EC2ControllerTests(unittest.TestCase):
         self.assertEqual(ec2.instance_actions[0], {'instance': inst, 'action': 'stopped'})
         ec2.start_instance(inst)
         self.assertEqual(ec2.instance_actions[1], {'instance': inst, 'action': 'started'})
+
+    @patch.object(matterhorn.pyhorn.MHClient, 'me')
+    @patch.object(matterhorn.pyhorn.MHClient, 'statistics')
+    @patch.object(matterhorn.pyhorn.MHClient, 'hosts')
+    @patch.object(matterhorn.MatterhornController, 'queued_job_count')
+    def test_unmappable_instance(self, mock_qjc, mock_hosts, mock_stats, mock_me):
+
+        ec2 = EC2Controller('dev99')
+
+        ec2._admin = Mock(tags={'Name': 'dev99-admin'}, ip_address='5.5.5.5')
+        ec2._instances = [
+            Mock(id=1, tags={'Name': 'dev99-worker'}, state="running"),
+            Mock(id=2, tags={'Name': 'dev99-worker'}, state="running"),
+            Mock(id=3, tags={'Name': 'dev99-worker'}, state="running")
+        ]
+        ec2._mh = matterhorn.MatterhornController('http://matterhorn.example.edu')
+        ec2._mh.instance_host_map = {
+                1: 'http://foo',
+                2: 'https://bar'
+            }
+        mock_qjc.return_value = 0
+        mock_stats.running_jobs = Mock(return_value=0)
+        mock_hosts.return_value = [
+            Mock(base_url='http://foo', maintenance=False),
+            Mock(base_url='https://bar', maintenance=False)
+        ]
+        summary = ec2.status_summary()
+        self.assertEqual(len(summary['instances']), 3)
+        self.assertEqual(summary['instances'][2]['mh_host'], 'unknown')

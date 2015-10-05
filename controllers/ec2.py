@@ -251,7 +251,12 @@ class EC2Controller(object):
                 'state': inst.state,
             }
             if mh_is_up and self.is_mh(inst):
-                inst_summary['maintenance'] = self.mh.is_in_maintenance(inst)
+                try:
+                    mh_host = self.mh.get_host_for_instance(inst)
+                    inst_summary['maintenance'] = mh_host.maintenance
+                    inst_summary['mh_host'] = mh_host.base_url
+                except MatterhornControllerException:
+                    inst_summary['mh_host'] = 'unknown'
             summary['instances'].append(inst_summary)
 
         return summary
