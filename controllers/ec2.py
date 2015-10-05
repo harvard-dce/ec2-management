@@ -185,8 +185,7 @@ class EC2Controller(object):
     def workers(self):
         return filter(self.is_worker, self.mh_instances)
 
-    @property
-    def idle_workers(self):
+    def get_idle_workers(self):
         return filter(
             lambda inst: self.is_running(inst) and self.mh.is_idle(inst),
             self.workers
@@ -529,10 +528,12 @@ class EC2Controller(object):
                 self.scale_up(num_workers=1)
                 return
 
-            log.debug("%d idle workers", len(self.idle_workers))
-            if len(self.idle_workers) > settings.EC2M_MIN_IDLE_WORKERS:
+            idle = self.get_idle_workers()
+            log.debug("%d idle workers", len(idle))
+            if len(idle) > settings.EC2M_MIN_IDLE_WORKERS:
                 log.info("Attempting to scale down.")
-                self.scale_down(num_workers=1, check_uptime=True)
+                self.scale_down(num_workers=1, check_uptime=True,
+                                stop_candidates=idle)
                 return
 
     def scale_to(self, num_workers):
@@ -580,7 +581,7 @@ class EC2Controller(object):
         log.info("Starting %d worker(s)", len(instances_to_start))
         self.start_instances(instances_to_start, wait=False)
 
-    def scale_down(self, num_workers, check_uptime=False):
+    def scale_down(self, num_workers, check_uptime=False, stop_candidates=None):
 
         running = filter(self.is_running, self.workers)
 
@@ -600,7 +601,9 @@ class EC2Controller(object):
             else:
                 raise ScalingException(error_msg)
 
-        stop_candidates = self.idle_workers
+        if stop_candidates is None:
+            stop_candidates = self.get_idle_workers()
+
         if len(stop_candidates) < num_workers:
             error_msg = "Cluster does not have {} idle workers to stop".format(
                 num_workers

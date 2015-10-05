@@ -258,7 +258,7 @@ class EC2ControllerTests(unittest.TestCase):
         mock_settings.EC2M_MIN_WORKERS = 3
         self.assertRaisesRegexp(ScalingException, 'violates min workers', ec2.scale_down, 1)
 
-    @patch.object(EC2Controller, 'idle_workers', new_callable=PropertyMock)
+    @patch.object(EC2Controller, 'get_idle_workers')
     @patch('controllers.ec2.settings', autospec=True)
     def test_scale_down_no_idle_workers(self, mock_settings, mock_idle):
         ec2 = EC2Controller('dev99')
@@ -270,7 +270,7 @@ class EC2ControllerTests(unittest.TestCase):
         mock_settings.EC2M_MIN_WORKERS = 0
         self.assertRaisesRegexp(ScalingException, "1 idle workers to stop", ec2.scale_down, 1)
 
-    @patch.object(EC2Controller, 'idle_workers', new_callable=PropertyMock)
+    @patch.object(EC2Controller, 'get_idle_workers')
     @patch.object(EC2Controller, 'stop_instances')
     @patch('controllers.ec2.utils.billed_minutes')
     @patch('controllers.ec2.utils.total_uptime')
