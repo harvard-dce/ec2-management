@@ -18,7 +18,8 @@ class MatterhornController():
     def client_factory(cls, api_url):
         client = pyhorn.MHClient(api_url,
                                  user=settings.MATTERHORN_ADMIN_SERVER_USER,
-                                 passwd=settings.MATTERHORN_ADMIN_SERVER_PASS
+                                 passwd=settings.MATTERHORN_ADMIN_SERVER_PASS,
+                                 timeout=settings.PYHORN_TIMEOUT
                                  )
         try:
             log.debug("verifying pyhorn client connection")

@@ -7,6 +7,7 @@ click==5.1
 pyloggly==0.1.0
 arrow==0.6.0
 requests==2.7.0
+stopit==1.1.1
 
 # for testing
 mock==1.0.1

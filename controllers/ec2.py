@@ -2,6 +2,7 @@
 import re
 import sys
 import time
+import stopit
 import logging
 from wrapt import ObjectProxy
 from operator import itemgetter
@@ -225,10 +226,13 @@ class EC2Controller(object):
 
         try:
             log.debug("Trying to fetch stats from Matterhorn")
-            stats = self.mh.service_stats()
-            mh_is_up = True
-        except (RequestsTimeout, MatterhornCommunicationException), e:
-            log.debug("Error communicating with Matterhorn: %s", str(e))
+            with stopit.SignalTimeout(5, swallow_exc=False):
+                stats = self.mh.service_stats()
+                mh_is_up = True
+        except (RequestsTimeout,
+                stopit.TimeoutException,
+                MatterhornCommunicationException), e:
+            log.debug("Unable to communicate with Matterhorn: %s", str(e))
             mh_is_up = False
 
         if mh_is_up:
@@ -416,7 +420,9 @@ class EC2Controller(object):
         def api_callback(cb_instances):
             api_url = 'http://' + self.admin_instance.ip_address
             try:
-                client = MatterhornController.client_factory(api_url)
+                # set a short timeout as we're polling for the api to be up
+                with stopit.SignalTimeout(5, swallow_exc=False):
+                    client = MatterhornController.client_factory(api_url)
                 return True
             except Exception:
                 pass
