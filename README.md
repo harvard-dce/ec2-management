@@ -1,3 +1,7 @@
+## Deprecated
+
+Reimplemented specifically for opsworks clusters as harvard-dce/mo-scaler
+
 ## EC2 Manager Scripts
 
 Allows control over the entire AWS, Matterhorn, Zadara stack.  These scripts 
